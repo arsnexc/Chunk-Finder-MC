@@ -248,6 +248,12 @@ public final class UiRegressionTest {
             PickerLayout layout = PickerLayout.at(size[0], size[1]);
             check(layout.panel().x() >= 0 && layout.panel().right() <= size[0], "picker never exceeds screen width");
             check(layout.panel().y() >= 0 && layout.panel().bottom() <= size[1], "picker never exceeds screen height");
+            check(layout.search().bottom() < layout.selectedOnly().y(), "search does not overlap bulk controls");
+            check(layout.clearAll().bottom() < layout.list().y(), "bulk controls do not overlap rows");
+            check(layout.clearAll().right() <= layout.search().right(), "all bulk controls fit narrow windows");
+            check(layout.previous().bottom() < layout.apply().y(), "paging does not overlap Apply/Cancel");
+            check(layout.cancel().right() < layout.apply().x(), "Apply and Cancel have separate hitboxes");
+            check(layout.apply().bottom() < layout.panel().bottom(), "Apply is visible at every supported GUI scale");
             check(layout.search().bottom() < layout.list().y(), "search does not overlap rows");
             for (int row = 0; row < layout.pageSize(); row++)
                 check(layout.row(row).bottom() <= layout.list().bottom(), "picker rows fit at all supported GUI scales");

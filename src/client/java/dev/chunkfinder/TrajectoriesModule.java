@@ -6,6 +6,7 @@ import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.BlockPos;
+import dev.chunkfinder.core.Nearest;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -26,7 +27,7 @@ public final class TrajectoriesModule extends Module {
         super.setEnabled(settings.enabled());
     }
 
-    @Override public void setEnabled(boolean value) { super.setEnabled(value); settings.setEnabled(value); }
+    @Override public void setEnabled(boolean value) { super.setEnabled(value); settings.setEnabled(value); if (!value) visibleCount = 0; }
     public int steps() { return settings.range(); }
     public void setSteps(int value) { settings.setRange(value); }
     public boolean showItems() { return settings.option(); }
@@ -40,12 +41,17 @@ public final class TrajectoriesModule extends Module {
         PoseStack.Pose pose = context.matrices().last();
         VertexConsumer lines = context.consumers().getBuffer(
                 net.minecraft.client.renderer.rendertype.ChunkFinderThroughWallLines.renderType());
+        Nearest<Entity> nearest = new Nearest<>(MAX_TRACKED);
         for (Entity entity : client.level.entitiesForRendering()) {
             boolean item = entity instanceof ItemEntity;
             if (!(entity instanceof Projectile) && !(item && showItems())) continue;
-            if (entity.isRemoved() || entity.position().distanceToSqr(camera) > 96.0 * 96.0
-                    || entity.getDeltaMovement().lengthSqr() < 0.0004) continue;
-            if (visibleCount++ >= MAX_TRACKED) break;
+            double distance = entity.position().distanceToSqr(camera);
+            if (entity.isRemoved() || distance > 96.0 * 96.0 || entity.getDeltaMovement().lengthSqr() < 0.0004) continue;
+            nearest.offer(entity, distance);
+        }
+        for (Entity entity : nearest.values()) {
+            boolean item = entity instanceof ItemEntity;
+            boolean drewPath = false;
             Vec3 position = entity.position();
             Vec3 velocity = entity.getDeltaMovement();
             double gravity = entity.isNoGravity() ? 0.0 : entity.getGravity();
@@ -60,10 +66,12 @@ public final class TrajectoriesModule extends Module {
                 boolean collided = hit.getType() == HitResult.Type.BLOCK;
                 if (collided) next = hit.getLocation();
                 addSegment(lines, pose, position.subtract(camera), next.subtract(camera), color);
+                drewPath = true;
                 if (collided) break;
                 position = next;
                 velocity = velocity.scale(0.99).add(0.0, -gravity, 0.0);
             }
+            if (drewPath) visibleCount++;
         }
     }
 
@@ -75,7 +83,7 @@ public final class TrajectoriesModule extends Module {
     }
 
     public void renderHud(Minecraft client, GuiGraphics graphics) {
-        if (!isEnabled() || !FeatureAccess.allowed(client) || client.options.hideGui) return;
+        if (!isEnabled() || !FeatureAccess.allowed(client) || client.options.hideGui || client.screen != null) return;
         int x = 12, y = graphics.guiHeight() - 49;
         graphics.fill(x, y, x + 208, y + 37, 0xDA101722);
         graphics.fill(x, y, x + 3, y + 37, 0xFF80D5FF);

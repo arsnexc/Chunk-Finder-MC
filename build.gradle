@@ -52,7 +52,23 @@ tasks.register('uiRegressionTest', JavaExec) {
     jvmArgs '-Djava.awt.headless=true'
     inputs.files(fileTree('src/main/resources/assets/chunkfinder/font'))
 }
-tasks.named('check') { dependsOn tasks.named('uiRegressionTest') }
+sourceSets {
+    moduleRegression {
+        java.srcDirs = ['src/moduleTest/java']
+        compileClasspath += sourceSets.client.output + sourceSets.client.compileClasspath
+        runtimeClasspath += sourceSets.client.output + sourceSets.client.runtimeClasspath
+    }
+}
+tasks.register('moduleRegressionTest', JavaExec) {
+    group = 'verification'
+    description = 'Selection, config migration and bounded loaded-world scan regression checks.'
+    dependsOn tasks.named('moduleRegressionClasses')
+    classpath = sourceSets.moduleRegression.runtimeClasspath
+    mainClass = 'dev.chunkfinder.ModuleRegressionTest'
+}
+tasks.named('check') {
+    dependsOn tasks.named('uiRegressionTest'), tasks.named('moduleRegressionTest')
+}
 
 def modArchiveName = project.archives_base_name.toString()
 jar {

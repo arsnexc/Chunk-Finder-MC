@@ -71,13 +71,16 @@ jobs:
           regression = re.search(r'UI regression tests passed \((\d+) assertions\)\.', build_log)
           assert regression is not None, 'uiRegressionTest did not report a successful run'
           print(f'::notice title=UI regression tests::{regression.group(0)}')
+          modules = re.search(r'Module regression tests passed \((\d+) assertions\)\.', build_log)
+          assert modules is not None, 'moduleRegressionTest did not report a successful run'
+          print(f'::notice title=Module regression tests::{modules.group(0)}')
 
-          jar = Path('build/libs/chunk-finder-2-2.4.1.jar')
+          jar = Path('build/libs/chunk-finder-2-2.5.0.jar')
           with zipfile.ZipFile(jar) as archive:
               assert archive.testzip() is None, 'Corrupt JAR entry'
               metadata = json.loads(archive.read('fabric.mod.json'))
               assert metadata['id'] == 'chunkfinder'
-              assert metadata['version'] == '2.4.1'
+              assert metadata['version'] == '2.5.0'
               assert metadata['depends']['minecraft'] == '~1.21.11'
               assert metadata['license'] == 'MIT'
               for entry in (
@@ -85,6 +88,13 @@ jobs:
                   'dev/chunkfinder/ChunkFinderServer.class',
                   'dev/chunkfinder/ModuleSettingsScreen.class',
                   'dev/chunkfinder/BlockPickerScreen.class',
+                  'dev/chunkfinder/TargetPickerScreen.class',
+                  'dev/chunkfinder/TargetCatalog.class',
+                  'dev/chunkfinder/BlockEspModule.class',
+                  'dev/chunkfinder/core/LoadedBlockScanner.class',
+                  'dev/chunkfinder/core/TargetSelection.class',
+                  'dev/chunkfinder/settings/BlockEspConfig.class',
+                  'dev/chunkfinder/settings/OverlayConfig.class',
                   'dev/chunkfinder/MinecraftUiCanvas.class',
                   'dev/chunkfinder/ui/ClickGui.class',
                   'dev/chunkfinder/ui/UiTheme.class',
@@ -113,6 +123,8 @@ jobs:
               for test_class in ('UiRegressionTest', 'UiTestFixtures', 'UiPreview', 'AwtUiCanvas'):
                   assert not any(entry.startswith(f'dev/chunkfinder/ui/{test_class}')
                                  for entry in archive.namelist()), f'Test fixture leaked into mod: {test_class}'
+              assert not any(entry.startswith('dev/chunkfinder/ModuleRegressionTest')
+                             for entry in archive.namelist()), 'Module test fixture leaked into mod'
               for entry in archive.namelist():
                   if entry.endswith('.class'):
                       magic, minor, major = struct.unpack('>IHH', archive.read(entry)[:8])
@@ -124,10 +136,11 @@ jobs:
           print(f'::notice title=Installable mod::{jar.name} | SHA-256: {digest}')
           print(f'::notice title=UI font lookup::{ttf["file"]} resolves to {font_resource}')
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-              summary.write('## Chunk Finder 2.4.1\n\n')
+              summary.write('## Chunk Finder 2.5.0\n\n')
               summary.write('Built for Fabric / Minecraft **1.21.11** with **JDK 25**.\n\n')
               summary.write('Command: `./gradlew --no-daemon clean build`\n\n')
               summary.write(f'UI regression tests: **{regression.group(1)} assertions passed**.\n\n')
+              summary.write(f'Module regression tests: **{modules.group(1)} assertions passed**.\n\n')
               summary.write(f'Installable JAR: `{jar.name}`\n\nSHA-256: `{digest}`\n\n')
               summary.write('Archive contents, mod metadata and Java 21 bytecode checked; '
                             'no in-game or anti-cheat testing is implied.\n')
@@ -137,7 +150,7 @@ jobs:
         id: artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          path: build/libs/chunk-finder-2-2.4.1.jar
+          path: build/libs/chunk-finder-2-2.5.0.jar
           archive: false
           if-no-files-found: error
           retention-days: 90
@@ -146,4 +159,4 @@ jobs:
         env:
           ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
         run: |
-          printf '\n[Download chunk-finder-2-2.4.1.jar](%s) (GitHub sign-in required)\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+          printf '\n[Download chunk-finder-2-2.5.0.jar](%s) (GitHub sign-in required)\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"

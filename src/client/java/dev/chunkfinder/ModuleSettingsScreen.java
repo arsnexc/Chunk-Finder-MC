@@ -93,41 +93,28 @@ public final class ModuleSettingsScreen extends Screen {
             list.add(slider("sensitivity", "Sensitivity", "Higher values accept weaker activity clues",
                     chunk::sensitivity, 1, 10, value -> chunk.adjustSensitivity(value - chunk.sensitivity())));
             list.add(radius(chunk::simulationDistance, value -> chunk.adjustSimulationDistance(value - chunk.simulationDistance())));
-        } else if (module instanceof AncientDebrisFinderModule debris) {
-            list.add(radius(debris::searchRadius, debris::setSearchRadius));
-            list.add(toggle("traces", "Trace lines", "Connect your view to each detected block", debris::tracesEnabled,
-                    () -> debris.setTracesEnabled(!debris.tracesEnabled())));
-            list.add(toggle("outlines", "Outlines", "Highlight debris through terrain", debris::blockHighlightEnabled,
-                    () -> debris.setBlockHighlightEnabled(!debris.blockHighlightEnabled())));
-            list.add(rescan(debris::requestRescan));
-        } else if (module instanceof ItemEspModule esp) {
-            list.add(new Action("block", "Block", "Choose a registered block by name or ID", esp::targetBlockName,
-                    () -> Minecraft.getInstance().setScreen(new BlockPickerScreen(this, esp))));
+            list.add(rescan(chunk::requestRescan));
+        } else if (module instanceof BlockEspModule esp) {
+            if (!(esp instanceof AncientDebrisFinderModule)) {
+                list.add(new Action("targets", "Targets", "Select multiple target types; changes are saved with Apply", esp::targetSummary,
+                        () -> Minecraft.getInstance().setScreen(esp instanceof ItemEspModule blocks
+                                ? new BlockPickerScreen(this, blocks)
+                                : new TargetPickerScreen(this, esp.name() + " targets", esp.targetChoices(), esp.targetIds(), esp::setTargetIds))));
+            }
             list.add(radius(esp::searchRadius, esp::setSearchRadius));
             list.add(toggle("traces", "Trace lines", "Connect your view to detected blocks", esp::tracesEnabled,
                     () -> esp.setTracesEnabled(!esp.tracesEnabled())));
-            list.add(toggle("outlines", "Outlines", "Highlight blocks through terrain", esp::blockHighlightEnabled,
+            list.add(toggle("outlines", "Outlines", "Highlight selected blocks through terrain", esp::blockHighlightEnabled,
                     () -> esp.setBlockHighlightEnabled(!esp.blockHighlightEnabled())));
             list.add(rescan(esp::requestRescan));
-        } else if (module instanceof StorageEspModule storage) {
-            list.add(radius(storage::searchRadius, storage::setSearchRadius));
-            list.add(toggle("traces", "Trace lines", "Connect your view to storage blocks", storage::tracesEnabled,
-                    () -> storage.setTracesEnabled(!storage.tracesEnabled())));
-            list.add(toggle("outlines", "Outlines", "Highlight storage through terrain", storage::blockHighlightEnabled,
-                    () -> storage.setBlockHighlightEnabled(!storage.blockHighlightEnabled())));
-            list.add(rescan(storage::requestRescan));
-        } else if (module instanceof SpawnerEspModule spawners) {
-            list.add(radius(spawners::searchRadius, spawners::setSearchRadius));
-            list.add(toggle("traces", "Trace lines", "Connect your view to mob and trial spawners", spawners::tracesEnabled,
-                    () -> spawners.setTracesEnabled(!spawners.tracesEnabled())));
-            list.add(toggle("outlines", "Outlines", "Highlight spawners through terrain", spawners::blockHighlightEnabled,
-                    () -> spawners.setBlockHighlightEnabled(!spawners.blockHighlightEnabled())));
-            list.add(rescan(spawners::requestRescan));
         } else if (module instanceof EntityEspModule entities) {
+            list.add(new Action("targets", "Targets", "Select entity types or dropped item IDs; empty means no matches", entities::targetSummary,
+                    () -> Minecraft.getInstance().setScreen(new TargetPickerScreen(this, entities.name() + " targets",
+                            entities.targetChoices(), entities.targetIds(), entities::setTargetIds))));
             list.add(range(entities::range, 16, 128, entities::setRange));
-            boolean living = entities.mode() == EntityEspModule.Mode.LIVING;
+            boolean living = entities.mode() == EntityEspModule.Mode.ENTITIES;
             list.add(toggle("option", living ? "Players" : "Stack counts",
-                    living ? "Include players as well as mobs" : "Show item stack sizes in the HUD",
+                    living ? "Master switch: players must also be selected in Targets" : "Show item stack sizes in the HUD",
                     entities::option, () -> entities.setOption(!entities.option())));
         } else if (module instanceof TrajectoriesModule trajectories) {
             list.add(slider("steps", "Prediction steps", "Approximate flight prediction; not a server outcome guarantee",
@@ -162,11 +149,11 @@ public final class ModuleSettingsScreen extends Screen {
     private static String description(Module module) {
         if (module instanceof ChunkFinderModule) return "Geodes and possible activity clues in loaded chunks";
         if (module instanceof AncientDebrisFinderModule) return "Locate ancient debris in loaded Nether chunks";
-        if (module instanceof ItemEspModule) return "Highlight a chosen block through walls";
+        if (module instanceof ItemEspModule) return "Highlight multiple selected blocks through walls";
         if (module instanceof StorageEspModule) return "Chests, barrels, shulkers and other loaded storage";
         if (module instanceof SpawnerEspModule) return "Mob and trial spawners in loaded chunks";
-        if (module instanceof EntityEspModule entities) return entities.mode() == EntityEspModule.Mode.LIVING
-                ? "Players and mobs sent to your client" : "Dropped-item entities sent to your client";
+        if (module instanceof EntityEspModule entities) return entities.mode() == EntityEspModule.Mode.ENTITIES
+                ? "Selected entity types sent to your client" : "Dropped-item entities sent to your client";
         if (module instanceof TrajectoriesModule) return "Preview moving projectile and item paths";
         if (module instanceof TargetRendererModule) return "Outline your current crosshair target";
         return "Explore without moving your player · G to toggle Freecam";

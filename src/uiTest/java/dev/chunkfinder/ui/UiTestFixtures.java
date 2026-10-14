@@ -72,7 +72,7 @@ final class UiTestFixtures {
                         entry("freecam", "Freecam", freecam, List.of(slider("speed", "Speed", freecam, 1, 10))))),
                 new Category("render", "Render", Icon.RENDER, List.of(
                         entry("blocks", "Block ESP", blocks, List.of(
-                                new Action("block", "Block", "Choose a registered block", () -> "Diamond Ore", () -> { }),
+                                new Action("targets", "Targets", "Choose several registered blocks", () -> "3 selected", () -> { }),
                                 new Slider("radius", "Search radius", "Loaded chunks only", () -> blocks.number, 2, 12, blocks::set, n -> n + " ch"),
                                 new Toggle("traces", "Trace lines", "Draw traces", () -> false, () -> { }),
                                 new Toggle("outlines", "Outlines", "Draw outlines", () -> true, () -> { }),

@@ -35,13 +35,17 @@ public final class TargetRendererModule extends Module {
         AABB box;
         if (client.hitResult instanceof EntityHitResult hit) {
             Entity entity = hit.getEntity();
-            if (entity.isRemoved()) return null;
+            if (entity.isRemoved() || !entity.isAlive()) return null;
             box = entity.getBoundingBox();
         } else if (showBlocks() && client.hitResult instanceof BlockHitResult hit
                 && hit.getType() == HitResult.Type.BLOCK) {
-            box = new AABB(hit.getBlockPos());
+            if (!client.level.hasChunkAt(hit.getBlockPos())) return null;
+            var shape = client.level.getBlockState(hit.getBlockPos()).getShape(client.level, hit.getBlockPos());
+            if (shape.isEmpty()) return null;
+            box = shape.bounds().move(hit.getBlockPos());
         } else return null;
-        return box.getCenter().distanceToSqr(client.player.position()) <= (double) range() * range() ? box : null;
+        return client.hitResult.getLocation().distanceToSqr(client.gameRenderer.getMainCamera().position())
+                <= (double) range() * range() ? box : null;
     }
 
     public void renderWorld(WorldRenderContext context) {
@@ -64,7 +68,7 @@ public final class TargetRendererModule extends Module {
     }
 
     public void renderHud(Minecraft client, GuiGraphics graphics) {
-        if (!isEnabled() || client.options.hideGui || bounds(client) == null) return;
+        if (!isEnabled() || client.options.hideGui || client.screen != null || bounds(client) == null) return;
         String label = client.hitResult instanceof EntityHitResult hit
                 ? hit.getEntity().getName().getString() : client.level.getBlockState(
                 ((BlockHitResult) client.hitResult).getBlockPos()).getBlock().getName().getString();

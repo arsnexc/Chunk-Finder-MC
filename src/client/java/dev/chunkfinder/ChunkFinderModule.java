@@ -14,6 +14,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import dev.chunkfinder.core.Nearest;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -48,6 +49,11 @@ public final class ChunkFinderModule extends Module {
             publishDetections();
         }
     }
+    public void requestRescan() {
+        queue.clear(); activeScan = null; results.clear(); nextRefreshTick = 0;
+        queueX = queueZ = Integer.MIN_VALUE; queueDistance = -1;
+        publishDetections();
+    }
     public int sensitivity() { return settings.sensitivity(); }
     public int simulationDistance() { return settings.simulationDistance(); }
     public void adjustSensitivity(int n) {
@@ -77,15 +83,19 @@ public final class ChunkFinderModule extends Module {
         if (level != lastLevel) {
             lastLevel = level; results.clear(); queue.clear(); activeScan = null;
             publishDetections();
-            queueX = Integer.MIN_VALUE; queueZ = Integer.MIN_VALUE;
+            queueX = Integer.MIN_VALUE; queueZ = Integer.MIN_VALUE; queueDistance = -1; nextRefreshTick = 0;
         }
         int cx = client.player.blockPosition().getX() >> 4;
         int cz = client.player.blockPosition().getZ() >> 4;
         int radius = settings.simulationDistance();
+        boolean pruned = results.keySet().removeIf(c -> Math.abs((long) c.x() - cx) > radius
+                || Math.abs((long) c.z() - cz) > radius
+                || !level.hasChunkAt(new BlockPos(c.x() * 16, level.getMinY(), c.z() * 16)));
+        if (pruned) publishDetections();
         int move = Math.max(1, radius / 2);
         if ((queue.isEmpty() && activeScan == null && tickCount >= nextRefreshTick)
                 || radius != queueDistance
-                || Math.abs(cx - queueX) >= move || Math.abs(cz - queueZ) >= move) rebuild(level, cx, cz, radius);
+                || queueX == Integer.MIN_VALUE || Math.abs((long) cx - queueX) >= move || Math.abs((long) cz - queueZ) >= move) rebuild(level, cx, cz, radius);
         int budget = BLOCKS_PER_TICK;
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         while (budget > 0) {
@@ -97,6 +107,9 @@ public final class ChunkFinderModule extends Module {
                 activeScan = new ChunkScan(chunk, 256 * Math.max(0, level.getMaxY() - level.getMinY()));
             }
             ChunkScan scan = activeScan;
+            if (!level.hasChunkAt(new BlockPos(scan.chunk.x() * 16, level.getMinY(), scan.chunk.z() * 16))) {
+                results.remove(scan.chunk); activeScan = null; publishDetections(); continue;
+            }
             int amount = Math.min(budget, scan.total - scan.cursor);
             for (int i = 0; i < amount; i++) {
                 int index = scan.cursor + i;
@@ -199,7 +212,7 @@ public final class ChunkFinderModule extends Module {
     }
 
     public void renderHud(Minecraft client, GuiGraphics g) {
-        if (!isEnabled() || !FeatureAccess.allowed(client) || client.options.hideGui) return;
+        if (!isEnabled() || !FeatureAccess.allowed(client) || client.options.hideGui || client.screen != null) return;
         List<Detection> found = new ArrayList<>(renderDetections);
         found.sort(Comparator.comparingDouble(d -> distance(client, d)));
         int count = Math.min(3, found.size()), x = 12, y = 12, w = 226, h = 57 + count * 25;
@@ -231,12 +244,13 @@ public final class ChunkFinderModule extends Module {
     public void renderWorld(WorldRenderContext context) {
         Minecraft client = Minecraft.getInstance();
         if (!isEnabled() || !FeatureAccess.allowed(client) || renderDetections.isEmpty()
-                || context.consumers() == null) return;
+                || context.consumers() == null || client.level != lastLevel) return;
         Vec3 camera = context.gameRenderer().getMainCamera().position();
         PoseStack matrices = context.matrices();
         VertexConsumer lines = context.consumers().getBuffer(
                 net.minecraft.client.renderer.rendertype.ChunkFinderThroughWallLines.renderType());
-        for (Detection detection : renderDetections) {
+        for (Detection detection : Nearest.select(renderDetections, 64,
+                d -> new Vec3(d.x(), d.y(), d.z()).distanceToSqr(camera))) {
             int color = detection.kind() == Kind.GEODE ? 0xFFB493FF : 0xFFFFCE8D;
             AABB bounds = detection.bounds();
             for (int layer = 2; layer >= 0; layer--) {

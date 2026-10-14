@@ -41,18 +41,14 @@ public final class ChunkFinderClient implements ClientModInitializer {
             if (modules.itemEsp().isEnabled()) modules.itemEsp().tick(client);
             if (modules.storageEsp().isEnabled()) modules.storageEsp().tick(client);
             if (modules.spawnerEsp().isEnabled()) modules.spawnerEsp().tick(client);
+            modules.entityEsp().tick(client);
+            modules.droppedItemEsp().tick(client);
             modules.freecam().tick(client);
         });
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "chunk_finder_overlay"),
                 (graphics, deltaTracker) -> modules.chunkFinder().renderHud(Minecraft.getInstance(), graphics));
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "ancient_debris_overlay"),
-                (graphics, deltaTracker) -> modules.ancientDebrisFinder().renderHud(Minecraft.getInstance(), graphics));
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "item_esp_overlay"),
-                (graphics, deltaTracker) -> modules.itemEsp().renderHud(Minecraft.getInstance(), graphics));
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "storage_esp_overlay"),
-                (graphics, deltaTracker) -> modules.storageEsp().renderHud(Minecraft.getInstance(), graphics));
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "spawner_esp_overlay"),
-                (graphics, deltaTracker) -> modules.spawnerEsp().renderHud(Minecraft.getInstance(), graphics));
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "block_esp_overlays"),
+                (graphics, deltaTracker) -> modules.renderBlockHud(Minecraft.getInstance(), graphics));
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "entity_esp_overlay"),
                 (graphics, deltaTracker) -> modules.entityEsp().renderHud(Minecraft.getInstance(), graphics));
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "dropped_item_esp_overlay"),

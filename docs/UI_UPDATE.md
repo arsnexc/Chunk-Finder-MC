@@ -1,5 +1,7 @@
 # Dark category UI — UI-only update
 
+> Historical notes for 2.4/2.4.1. The current 2.5.0 multi-target behavior and module improvements are documented in [MULTI_TARGET_UPDATE.md](MULTI_TARGET_UPDATE.md).
+
 ## Scope
 
 This update was implemented against the repository's existing 2.4 source at
