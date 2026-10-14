@@ -9,8 +9,8 @@ to recover its unpublished changes.
 
 Only presentation, screen input handling, bundled UI font resources, UI tests,
 and build-artifact verification change. Scanners, module implementations,
-settings files, feature permissions, mixins, key bindings, mod version, and the
-Gradle wrapper remain unchanged. All ten existing modules and their existing
+settings files, feature permissions, mixins, key bindings, and the
+Gradle wrapper remain unchanged. The font-readability hotfix is version 2.4.1. All ten existing modules and their existing
 settings/actions remain available. The GitHub Actions workflow additionally
 verifies that the actual installable JAR contains the new screens, UI classes,
 font, and font license, and excludes headless test fixtures.
@@ -103,6 +103,31 @@ The font provider is `chunkfinder:ui`, with `minecraft:default` as a glyph
 fallback. No global Minecraft font is replaced. The TTF is a required runtime
 resource, not a generated mod binary or a build cache.
 
+## 2.4.1 font-readability hotfix
+
+The supplied in-game screenshot revealed missing-glyph boxes across the UI.
+The provider declared `chunkfinder:font/inter.ttf`, but Minecraft 1.21.11's
+`TrueTypeGlyphProviderDefinition.load` already adds `font/` before opening the
+resource. That declaration looked for `assets/chunkfinder/font/font/inter.ttf`,
+which does not exist. A failed provider causes `FontManager` to reject the font
+bundle, so the `minecraft:default` reference in that same bundle did not rescue it.
+
+The file identifier is now **`chunkfinder:inter.ttf`**, correctly resolving to
+**`assets/chunkfinder/font/inter.ttf`**. The existing UI layout, font asset, and
+module behavior are unchanged.
+
+The headless fixture now reads the provider manifest and resolves the TTF using
+the same prefix rule instead of loading a hard-coded font path. New assertions
+cover printable ASCII and the UI's close, separator, and ellipsis characters.
+The new regression check was first run against the broken manifest and failed
+on `font/font/inter.ttf`, before the path was fixed. With the correction, all
+**845 headless assertions pass**. CI also resolves the
+manifest's file identifier inside the actual installable JAR.
+
+These checks verify resource lookup and font glyph coverage, not an in-game
+render. Confirm readability in Minecraft after replacing the old 2.4.0 JAR
+with the 2.4.1 artifact and restarting the game.
+
 ## Validation
 
 The Gradle **`uiRegressionTest`** task is wired into **`check`**, so the existing
@@ -147,7 +172,7 @@ against the real **Fabric / Minecraft 1.21.11** APIs. `check` depends on
 `uiRegressionTest`; the run log reports the assertion count. Only after a
 successful build does it verify the mod metadata, Java 21 bytecode, updated UI
 classes, font manifest/checksum, both licenses, and absence of test fixtures.
-It then uploads **`chunk-finder-2-2.4.0.jar`** as an installable artifact, not a
+It then uploads **`chunk-finder-2-2.4.1.jar`** as an installable artifact, not a
 sources JAR, and records the SHA-256 and download link in the run summary.
 
 Use the artifact attached to a successful run for the intended branch/commit.

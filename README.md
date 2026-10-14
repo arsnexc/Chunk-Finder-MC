@@ -1,13 +1,13 @@
-# Chunk Finder 2.4
+# Chunk Finder 2.4.1
 
 [![Build mod](https://github.com/arsnexc/Chunk-Finder-MC/actions/workflows/build.yml/badge.svg)](https://github.com/arsnexc/Chunk-Finder-MC/actions/workflows/build.yml)
 
-Standalone Minecraft **1.21.11 Fabric** mod project. The Chunk Finder 2.4 source lives at this repository's root. Requires Java 21 to run Minecraft, Fabric Loader >=0.19.5 and Fabric API. Build with **JDK 25** for the Fabric Loom toolchain.
+Standalone Minecraft **1.21.11 Fabric** mod project. The Chunk Finder 2.4.1 source lives at this repository's root. Requires Java 21 to run Minecraft, Fabric Loader >=0.19.5 and Fabric API. Build with **JDK 25** for the Fabric Loom toolchain.
 
 ## Download the mod — no local build needed
 
-1. Open [GitHub Actions](https://github.com/arsnexc/Chunk-Finder-MC/actions/workflows/build.yml) and select the latest successful **Build mod** run for `main`.
-2. Under **Artifacts**, download **chunk-finder-2-2.4.0.jar** (GitHub sign-in is required). This is the installable JAR, not the sources JAR; no ZIP extraction is needed.
+1. Open [GitHub Actions](https://github.com/arsnexc/Chunk-Finder-MC/actions/workflows/build.yml) and select the latest successful **Build mod** run for the branch containing this version. Until the UI changes are merged, use `arena/64b54617-chunk-finder-mc`, not the older `main` build.
+2. Under **Artifacts**, download **chunk-finder-2-2.4.1.jar** (GitHub sign-in is required). This is the installable JAR, not the sources JAR; no ZIP extraction is needed.
 3. Put it in your Minecraft 1.21.11 Fabric instance's `mods/` folder alongside Fabric API, and remove older Chunk Finder versions.
 
 The workflow builds automatically on pushes and pull requests, can also be run manually from Actions, and retains the JAR artifact for 90 days. Build caches and generated JARs are not committed to the repository.
@@ -20,7 +20,11 @@ GitHub Actions runs the command below with **JDK 25**. To reproduce the build yo
 ./gradlew --no-daemon clean build
 ```
 
-On Windows use `gradlew.bat --no-daemon clean build`. Install **only** `build/libs/chunk-finder-2-2.4.0.jar` in the game's `mods/` folder; remove older Chunk Finder versions. Building needs access to Gradle, Fabric, Mojang and Maven repositories.
+On Windows use `gradlew.bat --no-daemon clean build`. Install **only** `build/libs/chunk-finder-2-2.4.1.jar` in the game's `mods/` folder; remove older Chunk Finder versions. Building needs access to Gradle, Fabric, Mojang and Maven repositories.
+
+## 2.4.1 font readability fix
+
+Fixes the missing-glyph boxes in the dark UI by correcting the TrueType resource path. The build now checks the font path using Minecraft’s `font/` lookup rule and tests UI glyph coverage, instead of only checking that a font file is packaged. Remove the old `chunk-finder-2-2.4.0.jar` before installing this hotfix.
 
 ## Controls and modules
 

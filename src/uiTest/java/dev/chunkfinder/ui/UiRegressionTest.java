@@ -11,6 +11,7 @@ public final class UiRegressionTest {
     private static int assertions;
 
     public static void main(String[] args) throws Exception {
+        fontResources();
         geometry();
         layoutAtGuiScales();
         toggleAndExpansion();
@@ -23,6 +24,16 @@ public final class UiRegressionTest {
         rendering();
         System.out.println("UI regression tests passed (" + assertions + " assertions).");
         System.out.println("These are headless layout/input/rendering checks, not a Minecraft/Fabric or in-game test.");
+    }
+
+    private static void fontResources() throws Exception {
+        check(AwtUiCanvas.fontResource().endsWith("assets/chunkfinder/font/inter.ttf"),
+                "TTF identifier resolves with Minecraft's single font/ prefix");
+        java.awt.Font font = AwtUiCanvas.loadUiFont();
+        for (int codePoint = 32; codePoint <= 126; codePoint++)
+            check(font.canDisplay(codePoint), "UI font covers printable ASCII " + codePoint);
+        for (int codePoint : new int[]{0x00D7, 0x00B7, 0x2026})
+            check(font.canDisplay(codePoint), "UI font covers close, separator and ellipsis glyphs");
     }
 
     private static void geometry() {

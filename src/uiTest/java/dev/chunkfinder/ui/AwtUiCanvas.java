@@ -8,7 +8,10 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.Shape;
 import java.awt.image.BufferedImage;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,10 +27,28 @@ final class AwtUiCanvas implements UiCanvas, AutoCloseable {
         graphics.scale(scale, scale);
         graphics.setColor(new Color(0x111111));
         graphics.fillRect(0, 0, width, height);
-        Font font = Font.createFont(Font.TRUETYPE_FONT, Path.of("src/main/resources/assets/chunkfinder/font/inter.ttf").toFile());
+        Font font = loadUiFont();
         graphics.setFont(font.deriveFont(9.0f));
         graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         graphics.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON);
+    }
+
+    // Minecraft 1.21.11 TrueTypeGlyphProviderDefinition.load adds "font/" itself.
+    // Read the manifest instead of bypassing it with a hard-coded TTF path: the old
+    // fixture loaded Inter successfully even when the game looked in font/font/.
+    static Path fontResource() throws Exception {
+        Path assets = Path.of("src/main/resources/assets");
+        String manifest = Files.readString(assets.resolve("chunkfinder/font/ui.json"));
+        Matcher file = Pattern.compile("\"file\"\\s*:\\s*\"([a-z0-9_.-]+):([a-z0-9_./-]+)\"").matcher(manifest);
+        if (!file.find()) throw new AssertionError("UI font manifest has no namespaced TTF file");
+        Path resolved = assets.resolve(file.group(1)).resolve("font").resolve(file.group(2));
+        if (!Files.isRegularFile(resolved))
+            throw new AssertionError("Minecraft cannot resolve UI font: " + resolved + "; file is relative to font/");
+        return resolved;
+    }
+
+    static Font loadUiFont() throws Exception {
+        return Font.createFont(Font.TRUETYPE_FONT, fontResource().toFile());
     }
 
     BufferedImage image() { return image; }

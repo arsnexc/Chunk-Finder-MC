@@ -2,7 +2,7 @@
   "providers": [
     {
       "type": "ttf",
-      "file": "chunkfinder:font/inter.ttf",
+      "file": "chunkfinder:inter.ttf",
       "size": 9.0,
       "oversample": 3.0,
       "shift": [

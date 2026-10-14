@@ -40,7 +40,7 @@ jobs:
         id: gradle
         run: |
           set -o pipefail
-          ./gradlew --no-daemon clean build | tee "$RUNNER_TEMP/chunkfinder-build.log"
+          ./gradlew --no-daemon clean build 2>&1 | tee "$RUNNER_TEMP/chunkfinder-build.log"
 
       - name: Report failed build
         if: failure() && steps.gradle.outcome == 'failure'
@@ -72,12 +72,12 @@ jobs:
           assert regression is not None, 'uiRegressionTest did not report a successful run'
           print(f'::notice title=UI regression tests::{regression.group(0)}')
 
-          jar = Path('build/libs/chunk-finder-2-2.4.0.jar')
+          jar = Path('build/libs/chunk-finder-2-2.4.1.jar')
           with zipfile.ZipFile(jar) as archive:
               assert archive.testzip() is None, 'Corrupt JAR entry'
               metadata = json.loads(archive.read('fabric.mod.json'))
               assert metadata['id'] == 'chunkfinder'
-              assert metadata['version'] == '2.4.0'
+              assert metadata['version'] == '2.4.1'
               assert metadata['depends']['minecraft'] == '~1.21.11'
               assert metadata['license'] == 'MIT'
               for entry in (
@@ -98,9 +98,16 @@ jobs:
               ):
                   assert entry in archive.namelist(), f'Missing {entry}'
               font = json.loads(archive.read('assets/chunkfinder/font/ui.json'))
-              assert font['providers'][0]['file'] == 'chunkfinder:font/inter.ttf'
-              assert font['providers'][1]['id'] == 'minecraft:default'
-              assert hashlib.sha256(archive.read('assets/chunkfinder/font/inter.ttf')).hexdigest() == (
+              ttf = font['providers'][0]
+              assert ttf['type'] == 'ttf'
+              namespace, relative_font_path = ttf['file'].split(':', 1)
+              # Minecraft 1.21.11 adds this prefix in TrueTypeGlyphProviderDefinition.load.
+              # Merely checking that a TTF is somewhere in the JAR missed the font/font/ bug.
+              font_resource = f'assets/{namespace}/font/{relative_font_path}'
+              assert font_resource in archive.namelist(), f'Unresolvable UI font: {font_resource}'
+              assert font_resource == 'assets/chunkfinder/font/inter.ttf'
+              assert font['providers'][1] == {'type': 'reference', 'id': 'minecraft:default'}
+              assert hashlib.sha256(archive.read(font_resource)).hexdigest() == (
                   '29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031'
               ), 'Unexpected UI font contents'
               for test_class in ('UiRegressionTest', 'UiTestFixtures', 'UiPreview', 'AwtUiCanvas'):
@@ -115,8 +122,9 @@ jobs:
           digest = hashlib.sha256(jar.read_bytes()).hexdigest()
           print(f'Installable JAR verified: {jar.name}\nSHA-256: {digest}')
           print(f'::notice title=Installable mod::{jar.name} | SHA-256: {digest}')
+          print(f'::notice title=UI font lookup::{ttf["file"]} resolves to {font_resource}')
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-              summary.write('## Chunk Finder 2.4\n\n')
+              summary.write('## Chunk Finder 2.4.1\n\n')
               summary.write('Built for Fabric / Minecraft **1.21.11** with **JDK 25**.\n\n')
               summary.write('Command: `./gradlew --no-daemon clean build`\n\n')
               summary.write(f'UI regression tests: **{regression.group(1)} assertions passed**.\n\n')
@@ -129,7 +137,7 @@ jobs:
         id: artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          path: build/libs/chunk-finder-2-2.4.0.jar
+          path: build/libs/chunk-finder-2-2.4.1.jar
           archive: false
           if-no-files-found: error
           retention-days: 90
@@ -138,4 +146,4 @@ jobs:
         env:
           ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
         run: |
-          printf '\n[Download chunk-finder-2-2.4.0.jar](%s) (GitHub sign-in required)\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+          printf '\n[Download chunk-finder-2-2.4.1.jar](%s) (GitHub sign-in required)\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
