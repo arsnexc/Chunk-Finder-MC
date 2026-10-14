@@ -60,12 +60,29 @@ jobs:
               for entry in (
                   'dev/chunkfinder/ChunkFinderClient.class',
                   'dev/chunkfinder/ChunkFinderServer.class',
+                  'dev/chunkfinder/ModuleSettingsScreen.class',
+                  'dev/chunkfinder/BlockPickerScreen.class',
+                  'dev/chunkfinder/MinecraftUiCanvas.class',
+                  'dev/chunkfinder/ui/ClickGui.class',
+                  'dev/chunkfinder/ui/UiTheme.class',
                   'dev/chunkfinder/mixin/MouseLookMixin.class',
                   'chunkfinder.client.mixins.json',
                   'assets/chunkfinder/lang/en_us.json',
+                  'assets/chunkfinder/font/ui.json',
+                  'assets/chunkfinder/font/inter.ttf',
+                  'assets/chunkfinder/font/OFL-Inter.txt',
                   'LICENSE_chunk-finder-2',
               ):
                   assert entry in archive.namelist(), f'Missing {entry}'
+              font = json.loads(archive.read('assets/chunkfinder/font/ui.json'))
+              assert font['providers'][0]['file'] == 'chunkfinder:font/inter.ttf'
+              assert font['providers'][1]['id'] == 'minecraft:default'
+              assert hashlib.sha256(archive.read('assets/chunkfinder/font/inter.ttf')).hexdigest() == (
+                  '29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031'
+              ), 'Unexpected UI font contents'
+              for test_class in ('UiRegressionTest', 'UiTestFixtures', 'UiPreview', 'AwtUiCanvas'):
+                  assert not any(entry.startswith(f'dev/chunkfinder/ui/{test_class}')
+                                 for entry in archive.namelist()), f'Test fixture leaked into mod: {test_class}'
               for entry in archive.namelist():
                   if entry.endswith('.class'):
                       magic, minor, major = struct.unpack('>IHH', archive.read(entry)[:8])

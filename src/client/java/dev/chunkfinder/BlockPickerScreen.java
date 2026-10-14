@@ -1,9 +1,13 @@
 package dev.chunkfinder;
 
+import dev.chunkfinder.ui.PickerLayout;
+import dev.chunkfinder.ui.UiCanvas;
+import dev.chunkfinder.ui.UiGeometry.Rect;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -16,21 +20,17 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
-public final class BlockPickerScreen extends Screen {
-    private static final int PANEL = 0xF20E1118;
-    private static final int ROW = 0xFF1C212D;
-    private static final int ROW_HOVER = 0xFF242B39;
-    private static final int TEXT = 0xFFE9ECF5;
-    private static final int MUTED = 0xFF929BAD;
-    private static final int ACCENT = 0xFF76BFFF;
-    private static final int ROW_HEIGHT = 32;
-    private static final int PAGE_SIZE = 8;
-    private static final List<BlockEntry> BLOCKS = loadBlocks();
+import static dev.chunkfinder.ui.UiTheme.*;
 
+/** Restyled single-target picker. Choosing a row retains the existing immediate-save behavior. */
+public final class BlockPickerScreen extends Screen {
+    private static final List<BlockEntry> BLOCKS = loadBlocks();
     private final Screen parent;
     private final ItemEspModule module;
     private EditBox search;
+    private List<BlockEntry> matches = BLOCKS;
     private int page;
+    private int keyboardIndex = -1;
 
     public BlockPickerScreen(Screen parent, ItemEspModule module) {
         super(Component.literal("Choose a block"));
@@ -40,119 +40,154 @@ public final class BlockPickerScreen extends Screen {
 
     @Override
     protected void init() {
-        Layout ui = layout();
-        search = new EditBox(font, ui.x() + 18, ui.y() + 54, ui.width() - 36, 20,
-                Component.literal("Search blocks"));
+        String query = search == null ? "" : search.getValue();
+        int savedPage = page, savedIndex = keyboardIndex;
+        PickerLayout ui = layout();
+        Rect field = ui.search();
+        search = new EditBox(font, field.x() + 9, field.y() + 9, Math.max(1, field.width() - 40), 14,
+                MinecraftUiCanvas.component("Search blocks"));
         search.setMaxLength(128);
-        search.setHint(Component.literal("Search name or minecraft:stone"));
-        search.setResponder(value -> page = 0);
+        search.setBordered(false);
+        search.setTextColor(TEXT);
+        search.setTextColorUneditable(MUTED);
+        search.setHint(MinecraftUiCanvas.component("Search name or minecraft:stone"));
+        search.setFormatter((value, cursor) -> MinecraftUiCanvas.component(value).getVisualOrderText());
+        search.setResponder(this::filter);
+        search.setValue(query);
+        keyboardIndex = savedIndex >= 0 && savedIndex < matches.size() ? savedIndex : -1;
+        page = keyboardIndex >= 0 ? ui.pageContaining(keyboardIndex, matches.size()) : ui.clampPage(savedPage, matches.size());
         addRenderableWidget(search);
         setInitialFocus(search);
+    }
+
+    private void filter(String value) {
+        String query = value.trim().toLowerCase(Locale.ROOT);
+        matches = query.isEmpty() ? BLOCKS : BLOCKS.stream().filter(entry -> entry.id().contains(query)
+                || entry.name().toLowerCase(Locale.ROOT).contains(query)).toList();
+        page = 0;
+        keyboardIndex = -1;
     }
 
     @Override
     public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
         super.renderBackground(graphics, mouseX, mouseY, delta);
-        graphics.fill(0, 0, width, height, 0x8805070B);
+        graphics.fill(0, 0, width, height, 0x58000000);
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
-        Layout ui = layout();
-        graphics.fill(ui.x() - 1, ui.y() - 1, ui.x() + ui.width() + 1, ui.y() + ui.height() + 1,
-                0xFF343947);
-        graphics.fill(ui.x(), ui.y(), ui.x() + ui.width(), ui.y() + ui.height(), PANEL);
-        graphics.fill(ui.x(), ui.y(), ui.x() + 3, ui.y() + ui.height(), ACCENT);
-        graphics.drawString(font, Component.literal("CHOOSE A BLOCK"), ui.x() + 18, ui.y() + 18, TEXT, true);
-        graphics.drawString(font, Component.literal("Search any registered block by name or ID"),
-                ui.x() + 18, ui.y() + 34, MUTED, false);
-
-        List<BlockEntry> matches = matches();
-        int pageSize = pageSize(ui);
-        int pageCount = Math.max(1, (matches.size() + pageSize - 1) / pageSize);
-        page = Math.min(page, pageCount - 1);
-        int start = page * pageSize;
-        int listY = ui.y() + 86;
-        graphics.drawString(font, Component.literal(matches.size() + " blocks"),
-                ui.x() + 18, ui.y() + 78, MUTED, false);
-        for (int row = 0; row < pageSize; row++) {
-            int index = start + row;
-            if (index >= matches.size()) break;
-            BlockEntry entry = matches.get(index);
-            int y = listY + row * ROW_HEIGHT;
-            boolean selected = entry.id().equals(module.targetBlockId());
-            graphics.fill(ui.x() + 18, y, ui.x() + ui.width() - 18, y + ROW_HEIGHT - 3,
-                    hovered(mouseX, mouseY, ui.x() + 18, y, ui.width() - 36, ROW_HEIGHT - 3)
-                            ? ROW_HOVER : ROW);
-            if (selected) graphics.fill(ui.x() + 18, y, ui.x() + 20, y + ROW_HEIGHT - 3, ACCENT);
-            graphics.drawString(font, Component.literal(entry.name()), ui.x() + 28, y + 4,
-                    selected ? 0xFFE7F5FF : TEXT, true);
-            graphics.drawString(font, Component.literal(entry.id()), ui.x() + 28, y + 17, MUTED, false);
+        UiCanvas canvas = new MinecraftUiCanvas(graphics, font);
+        PickerLayout ui = layout();
+        Rect panel = ui.panel();
+        shadow(canvas, panel, 10);
+        outlined(canvas, panel, 10, BORDER, PANEL);
+        text(canvas, "Choose a block", panel.x() + 14, panel.y() + 16, panel.width() - 54, TEXT);
+        text(canvas, "Selected: " + module.targetBlockName(), panel.x() + 14, panel.y() + 32, panel.width() - 28, MUTED);
+        if (ui.back().contains(mouseX, mouseY)) rounded(canvas, ui.back(), 4, ROW_HOVER);
+        centered(canvas, "×", ui.back(), MUTED);
+        outlined(canvas, ui.search(), 5, search.isFocused() ? ACTIVE_BORDER : BORDER, 0xFF222222);
+        if (!search.getValue().isEmpty()) {
+            if (ui.clearSearch().contains(mouseX, mouseY)) rounded(canvas, ui.clearSearch(), 3, ROW_HOVER);
+            centered(canvas, "×", ui.clearSearch(), MUTED);
         }
-
-        int footerY = ui.y() + ui.height() - 38;
-        drawFooterButton(graphics, ui.x() + 18, footerY, 70, "Prev", page > 0,
-                hovered(mouseX, mouseY, ui.x() + 18, footerY, 70, 22));
-        String pageLabel = (page + 1) + " / " + pageCount;
-        graphics.drawCenteredString(font, Component.literal(pageLabel), ui.x() + ui.width() / 2,
-                footerY + 7, MUTED);
-        drawFooterButton(graphics, ui.x() + ui.width() - 88, footerY, 70, "Next", page + 1 < pageCount,
-                hovered(mouseX, mouseY, ui.x() + ui.width() - 88, footerY, 70, 22));
-        graphics.drawString(font, Component.literal("ESC  Back"), ui.x() + 18,
-                ui.y() + ui.height() - 17, MUTED, false);
+        text(canvas, matches.size() + " blocks", ui.list().x(), ui.search().bottom() + 6, ui.list().width(), QUIET);
+        page = ui.clampPage(page, matches.size());
+        int start = page * ui.pageSize();
+        canvas.pushClip(ui.list());
+        for (int row = 0; row < ui.pageSize() && start + row < matches.size(); row++) {
+            BlockEntry entry = matches.get(start + row);
+            Rect bounds = ui.row(row);
+            boolean selected = entry.id().equals(module.targetBlockId());
+            boolean hovered = bounds.contains(mouseX, mouseY) && ui.list().contains(mouseX, mouseY);
+            outlined(canvas, bounds, 5, start + row == keyboardIndex ? FOCUS : selected ? ACTIVE_BORDER : BORDER,
+                    hovered ? ROW_HOVER : selected ? ACTIVE : ROW);
+            text(canvas, entry.name(), bounds.x() + 9, bounds.y() + 4, bounds.width() - 43, TEXT);
+            text(canvas, entry.id(), bounds.x() + 9, bounds.y() + 17, bounds.width() - 43, MUTED);
+            toggle(canvas, new Rect(bounds.right() - 25, bounds.y() + 10, 16, 8), selected);
+        }
+        if (matches.isEmpty()) {
+            centered(canvas, "No blocks found", ui.list(), MUTED);
+        }
+        canvas.popClip();
+        button(canvas, ui.previous(), "Previous", page > 0, mouseX, mouseY);
+        button(canvas, ui.next(), "Next", page + 1 < ui.pageCount(matches.size()), mouseX, mouseY);
+        centered(canvas, (page + 1) + " / " + ui.pageCount(matches.size()),
+                new Rect(ui.previous().right(), ui.previous().y(), ui.next().x() - ui.previous().right(), 22), MUTED);
+        text(canvas, "Select to save · Esc to go back", panel.x() + 14, panel.bottom() - 13, panel.width() - 28, QUIET);
+        // Draw the native EditBox last so its text/caret sit above the custom search-field background.
         super.render(graphics, mouseX, mouseY, delta);
     }
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         if (event.button() != 0) return super.mouseClicked(event, doubleClick);
-        Layout ui = layout();
-        int listY = ui.y() + 86;
-        List<BlockEntry> matches = matches();
-        int pageSize = pageSize(ui);
-        int start = page * pageSize;
-        for (int row = 0; row < pageSize; row++) {
-            int index = start + row;
-            int y = listY + row * ROW_HEIGHT;
-            if (index < matches.size() && inside(event.x(), event.y(), ui.x() + 18, y,
-                    ui.width() - 36, ROW_HEIGHT - 3)) {
-                module.setTargetBlock(matches.get(index).id());
-                Minecraft.getInstance().setScreen(parent);
-                return true;
-            }
-        }
-
-        int footerY = ui.y() + ui.height() - 38;
-        int pageCount = Math.max(1, (matches.size() + pageSize - 1) / pageSize);
-        if (inside(event.x(), event.y(), ui.x() + 18, footerY, 70, 22)) {
-            page = Math.max(0, page - 1);
+        PickerLayout ui = layout();
+        double x = event.x(), y = event.y();
+        if (ui.back().contains(x, y)) { onClose(); return true; }
+        if (ui.clearSearch().contains(x, y)) {
+            search.setValue("");
+            setFocused(search);
+            search.setFocused(true);
             return true;
         }
-        if (inside(event.x(), event.y(), ui.x() + ui.width() - 88, footerY, 70, 22)) {
-            page = Math.min(pageCount - 1, page + 1);
+        if (ui.search().contains(x, y)) {
+            search.mouseClicked(event, doubleClick);
+            setFocused(search);
+            // Padding belongs to the custom field too, even outside the native text hitbox.
+            search.setFocused(true);
             return true;
         }
+        page = ui.clampPage(page, matches.size());
+        if (ui.list().contains(x, y)) for (int row = 0; row < ui.pageSize(); row++) {
+            int index = page * ui.pageSize() + row;
+            if (index < matches.size() && ui.row(row).contains(x, y)) { choose(index); return true; }
+        }
+        if (ui.previous().contains(x, y)) { changePage(-1); return true; }
+        if (ui.next().contains(x, y)) { changePage(1); return true; }
         return super.mouseClicked(event, doubleClick);
     }
 
     @Override
-    public void onClose() {
+    public boolean mouseScrolled(double x, double y, double horizontal, double vertical) {
+        if (layout().list().contains(x, y) && vertical != 0) {
+            changePage(vertical > 0 ? -1 : 1);
+            return true;
+        }
+        return super.mouseScrolled(x, y, horizontal, vertical);
+    }
+
+    @Override
+    public boolean keyPressed(KeyEvent event) {
+        if (!matches.isEmpty() && (event.key() == 264 || event.key() == 265)) {
+            int direction = event.key() == 264 ? 1 : -1;
+            keyboardIndex = keyboardIndex < 0 ? page * layout().pageSize()
+                    : Math.max(0, Math.min(matches.size() - 1, keyboardIndex + direction));
+            page = layout().pageContaining(keyboardIndex, matches.size());
+            return true;
+        }
+        if ((event.key() == 257 || event.key() == 335) && keyboardIndex >= 0 && keyboardIndex < matches.size()) {
+            choose(keyboardIndex);
+            return true;
+        }
+        return super.keyPressed(event);
+    }
+
+    private void choose(int index) {
+        module.setTargetBlock(matches.get(index).id());
         Minecraft.getInstance().setScreen(parent);
     }
-
-    private List<BlockEntry> matches() {
-        String query = search == null ? "" : search.getValue().trim().toLowerCase(Locale.ROOT);
-        if (query.isEmpty()) return BLOCKS;
-        return BLOCKS.stream().filter(entry -> entry.id().contains(query)
-                || entry.name().toLowerCase(Locale.ROOT).contains(query)).toList();
+    private void changePage(int delta) {
+        page = layout().clampPage(page + delta, matches.size());
+        keyboardIndex = -1;
     }
+    @Override public void onClose() { Minecraft.getInstance().setScreen(parent); }
+    @Override public boolean isPauseScreen() { return false; }
+    private PickerLayout layout() { return PickerLayout.at(width, height); }
 
-    private void drawFooterButton(GuiGraphics graphics, int x, int y, int width, String label,
-                                  boolean enabled, boolean isHovered) {
-        int fill = enabled ? (isHovered ? 0xFF2D3A4C : 0xFF202B3A) : 0xFF171B23;
-        graphics.fill(x, y, x + width, y + 22, fill);
-        graphics.drawCenteredString(font, Component.literal(label), x + width / 2, y + 7,
-                enabled ? TEXT : 0xFF5F6674);
+    private static void button(UiCanvas canvas, Rect bounds, String label, boolean enabled, int mouseX, int mouseY) {
+        outlined(canvas, bounds, 5, enabled ? ACTIVE_BORDER : BORDER,
+                enabled && bounds.contains(mouseX, mouseY) ? ROW_HOVER : ROW);
+        centered(canvas, label, bounds, enabled ? TEXT : QUIET);
     }
 
     private static List<BlockEntry> loadBlocks() {
@@ -160,30 +195,10 @@ public final class BlockPickerScreen extends Screen {
         for (Block block : BuiltInRegistries.BLOCK) {
             if (block == Blocks.AIR) continue;
             Identifier id = BuiltInRegistries.BLOCK.getKey(block);
-            entries.add(new BlockEntry(block, id.toString(), block.getName().getString()));
+            entries.add(new BlockEntry(id.toString(), block.getName().getString()));
         }
         entries.sort(Comparator.comparing(BlockEntry::id));
         return List.copyOf(entries);
     }
-
-    private Layout layout() {
-        int panelWidth = Math.min(620, Math.max(360, width - 24));
-        int panelHeight = Math.min(430, Math.max(300, height - 24));
-        return new Layout((width - panelWidth) / 2, (height - panelHeight) / 2, panelWidth, panelHeight);
-    }
-
-    private int pageSize(Layout ui) {
-        return Math.max(1, Math.min(PAGE_SIZE, (ui.height() - 146) / ROW_HEIGHT));
-    }
-
-    private static boolean inside(double mouseX, double mouseY, int x, int y, int width, int height) {
-        return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
-    }
-
-    private static boolean hovered(int mouseX, int mouseY, int x, int y, int width, int height) {
-        return inside(mouseX, mouseY, x, y, width, height);
-    }
-
-    private record BlockEntry(Block block, String id, String name) { }
-    private record Layout(int x, int y, int width, int height) { }
+    private record BlockEntry(String id, String name) { }
 }

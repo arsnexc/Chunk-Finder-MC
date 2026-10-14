@@ -24,7 +24,9 @@ On Windows use `gradlew.bat --no-daemon clean build`. Install **only** `build/li
 
 ## Controls and modules
 
-**K** opens the paginated Module Studio; **ESC** closes it. **G** toggles Freecam. Each module has local settings. All modules start off on a clean install, except settings retained from earlier versions.
+**K** opens the dark category UI; **ESC** closes it. **G** toggles Freecam. Left-click a module/pill to toggle; right-click a module (or click its chevron) for inline settings. Drag sliders and scroll each panel independently. On narrow screens, use the bottom scrollbar or scroll outside panels to reach other columns. **Tab / Shift-Tab** navigates controls; **Enter / Space** activates them, and arrow keys adjust sliders or expand/collapse modules.
+
+Each module retains its existing local settings. All modules start off on a clean install, except settings retained from earlier versions. The block picker still selects a **single** target. The build runs headless UI regression tests and checks that the installable JAR contains the updated UI and bundled font. A successful build is **not in-game validation**. See [UI update notes](docs/UI_UPDATE.md) for scope, controls, and remaining checks.
 
 | Module | What it does |
 | --- | --- |

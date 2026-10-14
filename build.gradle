@@ -32,6 +32,28 @@ java {
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
 }
+// The UI core deliberately has no Minecraft dependencies. Compile/test it independently,
+// while the normal client compilation still validates the real Minecraft/Fabric adapters.
+sourceSets {
+    uiRegression {
+        java {
+            srcDirs = ['src/client/java', 'src/uiTest/java']
+            include 'dev/chunkfinder/ui/**'
+        }
+        resources.srcDirs = []
+    }
+}
+tasks.register('uiRegressionTest', JavaExec) {
+    group = 'verification'
+    description = 'Headless layout, input, clipping and monochrome UI regression checks.'
+    dependsOn tasks.named('uiRegressionClasses')
+    classpath = sourceSets.uiRegression.runtimeClasspath
+    mainClass = 'dev.chunkfinder.ui.UiRegressionTest'
+    jvmArgs '-Djava.awt.headless=true'
+    inputs.files(fileTree('src/main/resources/assets/chunkfinder/font'))
+}
+tasks.named('check') { dependsOn tasks.named('uiRegressionTest') }
+
 def modArchiveName = project.archives_base_name.toString()
 jar {
     from("LICENSE") { rename { "${it}_${modArchiveName}" } }
