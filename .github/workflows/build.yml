@@ -1,0 +1,99 @@
+name: Build mod
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Fabric 1.21.11 / JDK 25
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+          cache-dependency-path: |
+            build.gradle
+            settings.gradle
+            gradle.properties
+            gradle/wrapper/gradle-wrapper.properties
+
+      - name: Clean build
+        run: ./gradlew --no-daemon clean build
+
+      - name: Verify installable JAR
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import struct
+          import zipfile
+          from pathlib import Path
+
+          jar = Path('build/libs/chunk-finder-2-2.4.0.jar')
+          with zipfile.ZipFile(jar) as archive:
+              assert archive.testzip() is None, 'Corrupt JAR entry'
+              metadata = json.loads(archive.read('fabric.mod.json'))
+              assert metadata['id'] == 'chunkfinder'
+              assert metadata['version'] == '2.4.0'
+              assert metadata['depends']['minecraft'] == '~1.21.11'
+              assert metadata['license'] == 'MIT'
+              for entry in (
+                  'dev/chunkfinder/ChunkFinderClient.class',
+                  'dev/chunkfinder/ChunkFinderServer.class',
+                  'dev/chunkfinder/mixin/MouseLookMixin.class',
+                  'chunkfinder.client.mixins.json',
+                  'assets/chunkfinder/lang/en_us.json',
+                  'LICENSE_chunk-finder-2',
+              ):
+                  assert entry in archive.namelist(), f'Missing {entry}'
+              for entry in archive.namelist():
+                  if entry.endswith('.class'):
+                      magic, minor, major = struct.unpack('>IHH', archive.read(entry)[:8])
+                      assert magic == 0xCAFEBABE, f'Invalid class: {entry}'
+                      assert major <= 65, f'{entry} requires newer than Java 21'
+
+          digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          print(f'Installable JAR verified: {jar.name}\nSHA-256: {digest}')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('## Chunk Finder 2.4\n\n')
+              summary.write('Built for Fabric / Minecraft **1.21.11** with **JDK 25**.\n\n')
+              summary.write('Command: `./gradlew --no-daemon clean build`\n\n')
+              summary.write(f'Installable JAR: `{jar.name}`\n\nSHA-256: `{digest}`\n\n')
+              summary.write('Archive contents, mod metadata and Java 21 bytecode checked; '
+                            'no in-game or anti-cheat testing is implied.\n')
+          PY
+
+      - name: Upload installable JAR
+        id: artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: build/libs/chunk-finder-2-2.4.0.jar
+          archive: false
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Link JAR in build summary
+        env:
+          ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+        run: |
+          printf '\n[Download chunk-finder-2-2.4.0.jar](%s) (GitHub sign-in required)\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
