@@ -37,7 +37,24 @@ jobs:
             gradle/wrapper/gradle-wrapper.properties
 
       - name: Clean build
-        run: ./gradlew --no-daemon clean build
+        id: gradle
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon clean build | tee "$RUNNER_TEMP/chunkfinder-build.log"
+
+      - name: Report failed build
+        if: failure() && steps.gradle.outcome == 'failure'
+        run: |
+          python3 - <<'PYTHON'
+          import os
+          from pathlib import Path
+
+          log = Path(os.environ['RUNNER_TEMP']) / 'chunkfinder-build.log'
+          if log.exists():
+              tail = '\n'.join(log.read_text(errors='replace').splitlines()[-80:])
+              tail = tail[-12000:].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+              print(f'::error title=Gradle build diagnostics::{tail}')
+          PYTHON
 
       - name: Verify installable JAR
         run: |
@@ -45,9 +62,15 @@ jobs:
           import hashlib
           import json
           import os
+          import re
           import struct
           import zipfile
           from pathlib import Path
+
+          build_log = (Path(os.environ['RUNNER_TEMP']) / 'chunkfinder-build.log').read_text(errors='replace')
+          regression = re.search(r'UI regression tests passed \((\d+) assertions\)\.', build_log)
+          assert regression is not None, 'uiRegressionTest did not report a successful run'
+          print(f'::notice title=UI regression tests::{regression.group(0)}')
 
           jar = Path('build/libs/chunk-finder-2-2.4.0.jar')
           with zipfile.ZipFile(jar) as archive:
@@ -91,10 +114,12 @@ jobs:
 
           digest = hashlib.sha256(jar.read_bytes()).hexdigest()
           print(f'Installable JAR verified: {jar.name}\nSHA-256: {digest}')
+          print(f'::notice title=Installable mod::{jar.name} | SHA-256: {digest}')
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
               summary.write('## Chunk Finder 2.4\n\n')
               summary.write('Built for Fabric / Minecraft **1.21.11** with **JDK 25**.\n\n')
               summary.write('Command: `./gradlew --no-daemon clean build`\n\n')
+              summary.write(f'UI regression tests: **{regression.group(1)} assertions passed**.\n\n')
               summary.write(f'Installable JAR: `{jar.name}`\n\nSHA-256: `{digest}`\n\n')
               summary.write('Archive contents, mod metadata and Java 21 bytecode checked; '
                             'no in-game or anti-cheat testing is implied.\n')

@@ -51,7 +51,7 @@ public final class BlockPickerScreen extends Screen {
         search.setTextColor(TEXT);
         search.setTextColorUneditable(MUTED);
         search.setHint(MinecraftUiCanvas.component("Search name or minecraft:stone"));
-        search.setFormatter((value, cursor) -> MinecraftUiCanvas.component(value).getVisualOrderText());
+        search.addFormatter((value, cursor) -> MinecraftUiCanvas.component(value).getVisualOrderText());
         search.setResponder(this::filter);
         search.setValue(query);
         keyboardIndex = savedIndex >= 0 && savedIndex < matches.size() ? savedIndex : -1;
