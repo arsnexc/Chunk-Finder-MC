@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "chunkfinder-client-tests",
+  "version": "1.0.0",
+  "name": "Chunk Finder client smoke tests",
+  "environment": "client",
+  "license": "MIT",
+  "entrypoints": {
+    "fabric-client-gametest": ["dev.chunkfinder.ClientScreenSmokeTest"]
+  },
+  "depends": {
+    "chunkfinder": "*",
+    "fabric-client-gametest-api-v1": "*"
+  }
+}

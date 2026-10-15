@@ -70,6 +70,16 @@ tasks.named('check') {
     dependsOn tasks.named('uiRegressionTest'), tasks.named('moduleRegressionTest')
 }
 
+// Native UI tests are a separate development-only mod, never included in the installable JAR.
+// No world/server is started and no server EULA is accepted by these UI-only tests.
+fabricApi.configureTests {
+    createSourceSet = true
+    modId = 'chunkfinder-client-tests'
+    enableGameTests = false
+    enableClientGameTests = true
+    eula = false
+}
+
 def modArchiveName = project.archives_base_name.toString()
 jar {
     from("LICENSE") { rename { "${it}_${modArchiveName}" } }
