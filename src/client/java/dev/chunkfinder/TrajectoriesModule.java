@@ -65,7 +65,7 @@ public final class TrajectoriesModule extends Module {
         for (Entity entity : nearest.values()) {
             List<Point> points = TrajectoryPredictor.predict(TrajectoryQueries.point(entity.position()),
                     TrajectoryQueries.point(entity.getDeltaMovement()), entity.isNoGravity() ? 0 : entity.getGravity(),
-                    steps(), TrajectoryQueries.view(level, level::hasChunkAt, CollisionContext.of(entity)));
+                    steps(), TrajectoryQueries.view(level, pos -> LoadedChunks.at(level,pos), CollisionContext.of(entity)));
             if (!points.isEmpty()) next.add(new Path(entity, points,
                     entity instanceof ItemEntity ? 0xFFFFD69A : 0xFF80D5FF));
         }

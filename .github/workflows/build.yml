@@ -155,6 +155,7 @@ jobs:
                   'dev/chunkfinder/FreecamControls.class',
                   'dev/chunkfinder/RuntimeDiagnostics.class',
                   'dev/chunkfinder/SharedBlockReads.class',
+                  'dev/chunkfinder/LoadedChunks.class',
                   'dev/chunkfinder/core/TickReadCache.class',
                   'dev/chunkfinder/mixin/ClientBlockUpdatesMixin.class',
                   'dev/chunkfinder/FreecamTerrainVisibility.class',

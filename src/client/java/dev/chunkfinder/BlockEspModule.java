@@ -113,7 +113,7 @@ public abstract class BlockEspModule extends Module {
         ClientLevel level = client.level;
         if (!supportsLevel(level)) { clear(unavailableWorldMessage()); return; }
         if (targetBlocks.isEmpty()) { clear("No available targets selected"); return; }
-        LoadedBlockScanner.World world = new BlockTargetProbe(level, level::hasChunkAt, targetBlocks, exposedOnly(), sharedReads) {
+        LoadedBlockScanner.World world = new BlockTargetProbe(level, pos -> LoadedChunks.at(level, pos), targetBlocks, exposedOnly(), sharedReads) {
             @Override public boolean emptySection(int x, int z, int y) {
                 return loaded(x, z) && level.getChunk(x, z).getSection(level.getSectionIndex(y)).hasOnlyAir();
             }

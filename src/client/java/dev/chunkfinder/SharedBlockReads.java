@@ -14,7 +14,7 @@ public final class SharedBlockReads {
     public void begin(ClientLevel level){this.level=level;cache.begin(level,++tick);}
     public boolean canRead(int amount){return cache.canRead(amount);}
     public BlockState read(BlockPos pos){
-        if(level==null || !level.hasChunkAt(pos))throw new IllegalStateException("Attempted an unloaded shared block read");
+        if(level==null || !LoadedChunks.at(level,pos))throw new IllegalStateException("Attempted an unloaded shared block read");
         long key=pos.asLong();
         return cache.get(key,()->level.getBlockState(pos));
     }

@@ -50,3 +50,10 @@ All incomplete/blocked gates must remain explicit in the final delivery.
 - Manual workflow dispatch returned HTTP 403 (integration permission). Focused
   validation uses ordinary branch pushes; automatic gameplay is temporarily
   vanilla-only until common startup is resolved. Full matrix is still required.
+
+- Run `38715291514` with normal packet scheduling successfully entered the real
+  world and passed underground A/D, stationary-body and horizontal-flight checks.
+  It then caught a production availability defect: Minecraft 1.21.11's deprecated
+  `ClientLevel.hasChunk/hasChunkAt` returns true unconditionally. All affected
+  production checks now use `getChunkSource().getChunk(..., FULL, false) != null`.
+  The full three-renderer matrix is being rerun; no gameplay pass is claimed yet.

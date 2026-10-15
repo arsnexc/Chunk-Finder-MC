@@ -3,7 +3,6 @@ package dev.chunkfinder;
 import dev.chunkfinder.core.FreecamMovement;
 import dev.chunkfinder.core.FlightSmoothing;
 import dev.chunkfinder.core.TerrainBoundary;
-import net.minecraft.core.BlockPos;
 import dev.chunkfinder.settings.FreecamConfig;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
@@ -109,9 +108,8 @@ public final class FreecamModule extends Module {
         terrain.enforce(client);
         camera.setOldPosAndRot();
         if (captured != null && client.screen == null) moveCamera(); else smoothing.reset();
-        BlockPos.MutableBlockPos probe = new BlockPos.MutableBlockPos();
         boundary = TerrainBoundary.check(camera.getBlockX(), camera.getBlockZ(),
-                (x, z) -> client.level.hasChunkAt(probe.set(x * 16, client.level.getMinY(), z * 16)));
+                (x, z) -> LoadedChunks.at(client.level, x, z));
         restoreInputs(client);
     }
 

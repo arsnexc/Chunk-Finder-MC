@@ -37,7 +37,7 @@ public final class TargetRendererModule extends Module {
             box = entity.getBoundingBox();
         } else if (showBlocks() && client.hitResult instanceof BlockHitResult hit
                 && hit.getType() == HitResult.Type.BLOCK) {
-            if (!client.level.hasChunkAt(hit.getBlockPos())) return null;
+            if (!LoadedChunks.at(client.level,hit.getBlockPos())) return null;
             var shape = client.level.getBlockState(hit.getBlockPos()).getShape(client.level, hit.getBlockPos());
             if (shape.isEmpty()) return null;
             box = shape.bounds().move(hit.getBlockPos());

@@ -107,7 +107,7 @@ public final class ChunkFinderModule extends Module {
         int cz = client.player.blockPosition().getZ() >> 4;
         int radius = settings.simulationDistance();
         boolean pruned = results.keySet().removeIf(c -> !ChunkRange.contains(c.x(), c.z(), cx, cz, radius)
-                || !level.hasChunkAt(new BlockPos(c.x() * 16, level.getMinY(), c.z() * 16)));
+                || !LoadedChunks.at(level,c.x(),c.z()));
         if (pruned) publishDetections();
         int move = Math.max(1, radius / 2);
         if ((queue.isEmpty() && activeScan == null && tickCount >= nextRefreshTick)
@@ -120,7 +120,7 @@ public final class ChunkFinderModule extends Module {
                 ChunkCoord chunk = queue.pollFirst();
                 if (chunk == null) break;
                 BlockPos probe = new BlockPos(chunk.x() * 16 + 8, level.getMinY(), chunk.z() * 16 + 8);
-                if (!ChunkRange.contains(chunk.x(), chunk.z(), cx, cz, radius) || !level.hasChunkAt(probe)) {
+                if (!ChunkRange.contains(chunk.x(), chunk.z(), cx, cz, radius) || !LoadedChunks.at(level,probe)) {
                     if (results.remove(chunk) != null) publishDetections();
                     continue;
                 }
@@ -130,7 +130,7 @@ public final class ChunkFinderModule extends Module {
             // A one-chunk move can leave old work outside the radius without crossing
             // the queue-rebuild threshold. Check active work as well as cached results.
             if (!ChunkRange.contains(scan.chunk.x(), scan.chunk.z(), cx, cz, radius)
-                    || !level.hasChunkAt(new BlockPos(scan.chunk.x() * 16, level.getMinY(), scan.chunk.z() * 16))) {
+                    || !LoadedChunks.at(level,scan.chunk.x(),scan.chunk.z())) {
                 if (results.remove(scan.chunk) != null) publishDetections();
                 activeScan = null;
                 continue;
@@ -169,7 +169,7 @@ public final class ChunkFinderModule extends Module {
         chunks.sort(Comparator.comparingLong(c -> square(c.x() - cx) + square(c.z() - cz)));
         for (ChunkCoord chunk : chunks) {
             BlockPos probe = new BlockPos(chunk.x() * 16 + 8, level.getMinY(), chunk.z() * 16 + 8);
-            if (level.hasChunkAt(probe)) queue.addLast(chunk);
+            if (LoadedChunks.at(level,probe)) queue.addLast(chunk);
             else results.remove(chunk);
         }
         results.keySet().removeIf(c -> !ChunkRange.contains(c.x(), c.z(), cx, cz, radius));

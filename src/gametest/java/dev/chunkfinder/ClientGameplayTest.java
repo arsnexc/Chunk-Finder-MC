@@ -87,7 +87,8 @@ public final class ClientGameplayTest implements FabricClientGameTest {
             context.takeScreenshot("gameplay-" + variant + "-underground");
             context.runOnClient(client -> client.getCameraEntity().setPos(512,80,512)); context.waitTicks(3);
             check(context.computeOnClient(client -> modules.freecam().boundary() == TerrainBoundary.Status.UNAVAILABLE), "real loaded-terrain boundary produces an explicit warning");
-            check(context.computeOnClient(client -> !client.level.hasChunkAt(new BlockPos(512,64,512)) && client.player.position().distanceToSqr(body)<1e-5), "detached camera does not request or move the body to missing chunks");
+            check(context.computeOnClient(client -> !LoadedChunks.at(client.level,new BlockPos(512,64,512)) && client.player.position().distanceToSqr(body)<1e-5), "detached camera does not request or move the body to missing chunks");
+            check(context.computeOnClient(client -> LoadedChunks.at(client.level,client.player.blockPosition())), "actual player chunk is resident while the distant camera chunk is not");
             context.takeScreenshot("gameplay-" + variant + "-terrain-boundary");
             context.runOnClient(client -> client.getCameraEntity().setPos(8,66,8));
             world.getServer().runCommand("gamemode creative @a");
