@@ -33,6 +33,7 @@ public final class ModuleRegressionTest {
 
     public static void main(String[] args) throws Exception {
         ids(); selection(); nearest(); configuration(); scanner(); freecamMovement(); visibleCandidates(); chunkRange(); snapshotPublication();
+        assertions += TrajectoryRegressionTest.run();
         System.out.println("Module regression tests passed (" + assertions + " assertions).");
         System.out.println("Uses fake loaded-world access; not an in-game rendering or anti-cheat test.");
     }

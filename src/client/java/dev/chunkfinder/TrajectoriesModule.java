@@ -2,24 +2,30 @@ package dev.chunkfinder;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import dev.chunkfinder.core.Nearest;
+import dev.chunkfinder.core.TrajectoryPredictor;
+import dev.chunkfinder.core.TrajectoryPredictor.Point;
 import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.core.BlockPos;
-import dev.chunkfinder.core.Nearest;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.projectile.Projectile;
-import net.minecraft.world.level.ClipContext;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.CollisionContext;
 
-/** Approximate client-side path preview. Never changes projectile physics or loads chunks. */
+import java.util.ArrayList;
+import java.util.List;
+
+/** Bounded, approximate client-side paths. Collision work runs once per tick, never per render frame. */
 public final class TrajectoriesModule extends Module {
     private static final int MAX_TRACKED = 24;
     private final OverlaySettings settings = new OverlaySettings("chunkfinder-trajectories.json", 36, 12, 72);
+    private record Path(Entity source, List<Point> points, int color) { }
+    private List<Path> paths = List.of();
+    private ClientLevel lastLevel;
     private int visibleCount;
 
     public TrajectoriesModule() {
@@ -27,68 +33,82 @@ public final class TrajectoriesModule extends Module {
         super.setEnabled(settings.enabled());
     }
 
-    @Override public void setEnabled(boolean value) { super.setEnabled(value); settings.setEnabled(value); if (!value) visibleCount = 0; }
+    @Override public void setEnabled(boolean value) {
+        if (value == isEnabled()) return;
+        super.setEnabled(value); settings.setEnabled(value); invalidate();
+    }
     public int steps() { return settings.range(); }
-    public void setSteps(int value) { settings.setRange(value); }
+    public void setSteps(int value) {
+        int before = settings.range(); settings.setRange(value);
+        if (before != settings.range()) invalidate();
+    }
     public boolean showItems() { return settings.option(); }
-    public void setShowItems(boolean value) { settings.setOption(value); }
+    public void setShowItems(boolean value) {
+        boolean before = settings.option(); settings.setOption(value);
+        if (before != settings.option()) invalidate();
+    }
+    private void invalidate() { paths = List.of(); lastLevel = null; visibleCount = 0; }
+
+    public void tick(Minecraft client) {
+        if (!isEnabled() || !FeatureAccess.allowed(client)) { invalidate(); return; }
+        ClientLevel level = client.level;
+        Vec3 camera = client.gameRenderer.getMainCamera().position();
+        Nearest<Entity> nearest = new Nearest<>(MAX_TRACKED);
+        for (Entity entity : level.entitiesForRendering()) {
+            boolean item = entity instanceof ItemEntity;
+            if (!(entity instanceof Projectile) && !(item && showItems())) continue;
+            double distance = entity.position().distanceToSqr(camera);
+            if (entity.isRemoved() || !entity.isAlive() || distance > 96.0 * 96.0
+                    || entity.getDeltaMovement().lengthSqr() < 0.0004) continue;
+            nearest.offer(entity, distance);
+        }
+        List<Path> next = new ArrayList<>();
+        for (Entity entity : nearest.values()) {
+            List<Point> points = TrajectoryPredictor.predict(TrajectoryQueries.point(entity.position()),
+                    TrajectoryQueries.point(entity.getDeltaMovement()), entity.isNoGravity() ? 0 : entity.getGravity(),
+                    steps(), TrajectoryQueries.view(level, level::hasChunkAt, CollisionContext.of(entity)));
+            if (!points.isEmpty()) next.add(new Path(entity, points,
+                    entity instanceof ItemEntity ? 0xFFFFD69A : 0xFF80D5FF));
+        }
+        paths = List.copyOf(next);
+        lastLevel = level;
+        visibleCount = 0;
+    }
 
     public void renderWorld(WorldRenderContext context) {
         Minecraft client = Minecraft.getInstance();
         visibleCount = 0;
-        if (!isEnabled() || !FeatureAccess.allowed(client) || context.consumers() == null) return;
+        if (!isEnabled() || !FeatureAccess.allowed(client) || client.level != lastLevel
+                || context.consumers() == null || paths.isEmpty()) return;
         Vec3 camera = context.gameRenderer().getMainCamera().position();
         PoseStack.Pose pose = context.matrices().last();
         VertexConsumer lines = context.consumers().getBuffer(
                 net.minecraft.client.renderer.rendertype.ChunkFinderThroughWallLines.renderType());
-        Nearest<Entity> nearest = new Nearest<>(MAX_TRACKED);
-        for (Entity entity : client.level.entitiesForRendering()) {
-            boolean item = entity instanceof ItemEntity;
-            if (!(entity instanceof Projectile) && !(item && showItems())) continue;
-            double distance = entity.position().distanceToSqr(camera);
-            if (entity.isRemoved() || distance > 96.0 * 96.0 || entity.getDeltaMovement().lengthSqr() < 0.0004) continue;
-            nearest.offer(entity, distance);
-        }
-        for (Entity entity : nearest.values()) {
-            boolean item = entity instanceof ItemEntity;
-            boolean drewPath = false;
-            Vec3 position = entity.position();
-            Vec3 velocity = entity.getDeltaMovement();
-            double gravity = entity.isNoGravity() ? 0.0 : entity.getGravity();
-            int color = item ? 0xFFFFD69A : 0xFF80D5FF;
-            for (int step = 0; step < steps(); step++) {
-                Vec3 next = position.add(velocity);
-                BlockPos probe = new BlockPos((int) Math.floor(next.x), (int) Math.floor(next.y),
-                        (int) Math.floor(next.z));
-                if (!client.level.hasChunkAt(probe)) break;
-                BlockHitResult hit = client.level.clip(new ClipContext(position, next,
-                        ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, entity));
-                boolean collided = hit.getType() == HitResult.Type.BLOCK;
-                if (collided) next = hit.getLocation();
-                addSegment(lines, pose, position.subtract(camera), next.subtract(camera), color);
-                drewPath = true;
-                if (collided) break;
-                position = next;
-                velocity = velocity.scale(0.99).add(0.0, -gravity, 0.0);
+        for (Path path : paths) {
+            if (path.source.isRemoved() || !path.source.isAlive() || path.source.level() != client.level) continue;
+            for (int i = 1; i < path.points.size(); i++) {
+                addSegment(lines, pose, path.points.get(i - 1), path.points.get(i), camera, path.color);
             }
-            if (drewPath) visibleCount++;
+            visibleCount++;
         }
     }
 
-    private static void addSegment(VertexConsumer lines, PoseStack.Pose pose, Vec3 a, Vec3 b, int color) {
-        lines.addVertex(pose, (float) a.x, (float) a.y, (float) a.z)
+    private static void addSegment(VertexConsumer lines, PoseStack.Pose pose, Point a, Point b, Vec3 camera, int color) {
+        lines.addVertex(pose, (float) (a.x() - camera.x), (float) (a.y() - camera.y), (float) (a.z() - camera.z))
                 .setColor(color).setNormal(pose, 0.0F, 1.0F, 0.0F).setLineWidth(1.8F);
-        lines.addVertex(pose, (float) b.x, (float) b.y, (float) b.z)
+        lines.addVertex(pose, (float) (b.x() - camera.x), (float) (b.y() - camera.y), (float) (b.z() - camera.z))
                 .setColor(color).setNormal(pose, 0.0F, 1.0F, 0.0F).setLineWidth(1.8F);
     }
 
     public void renderHud(Minecraft client, GuiGraphics graphics) {
-        if (!isEnabled() || !FeatureAccess.allowed(client) || client.options.hideGui || client.screen != null) return;
+        if (!isEnabled() || !FeatureAccess.allowed(client) || client.level != lastLevel
+                || client.options.hideGui || client.screen != null) return;
         int x = 12, y = graphics.guiHeight() - 49;
         graphics.fill(x, y, x + 208, y + 37, 0xDA101722);
         graphics.fill(x, y, x + 3, y + 37, 0xFF80D5FF);
         graphics.drawString(client.font, Component.literal("TRAJECTORIES"), x + 11, y + 7, 0xFFCBECFF, true);
-        graphics.drawString(client.font, Component.literal(visibleCount + " moving objects  ·  approximate path"),
-                x + 11, y + 21, 0xFFAABBCD, false);
+        String status = visibleCount + " paths · approximate";
+        String fitted = client.font.substrByWidth(Component.literal(status), 186).getString();
+        graphics.drawString(client.font, Component.literal(fitted), x + 11, y + 21, 0xFFAABBCD, false);
     }
 }

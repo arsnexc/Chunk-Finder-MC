@@ -8,7 +8,7 @@ import net.minecraft.world.level.LevelHeightAccessor;
 
 import java.util.Set;
 
-/** Checks actual Minecraft height contracts with synthetic block access, without opening a world/server. */
+/** Checks actual Minecraft height and trajectory contracts with synthetic block access, without opening a world/server. */
 public final class ClientModuleContractTest implements FabricClientGameTest {
     private int assertions;
 
@@ -69,9 +69,10 @@ public final class ClientModuleContractTest implements FabricClientGameTest {
             for (int section = 0; section < 24; section++) scanner.tick(dimension, air, 0, 0, 0, 0);
             check(skippedSections[0] == 24, "every full-height section, including the top one, can use the empty skip");
             check(scanner.scannedCount() == 1 && scanner.points().isEmpty(), "empty chunk completes in 24 bounded section operations");
+            assertions += ClientTrajectoryContractChecks.run();
         });
         System.out.println("Minecraft module contract tests passed (" + assertions + " assertions).");
-        System.out.println("Actual Minecraft height API with synthetic block access; no world/server or gameplay test.");
+        System.out.println("Actual Minecraft height/traversal/collision APIs with synthetic block access; no world/server or gameplay test.");
     }
 
     private void check(boolean condition, String message) {

@@ -43,6 +43,7 @@ public final class ChunkFinderClient implements ClientModInitializer {
             if (modules.spawnerEsp().isEnabled()) modules.spawnerEsp().tick(client);
             modules.entityEsp().tick(client);
             modules.droppedItemEsp().tick(client);
+            modules.trajectories().tick(client);
             modules.freecam().tick(client);
         });
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "chunk_finder_overlay"),
