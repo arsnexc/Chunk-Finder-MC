@@ -37,9 +37,12 @@ public abstract class BlockEspModule extends Module {
     private String scanStatus = "Waiting for world";
 
     protected BlockEspModule(String name, String file, Collection<String> defaults, Predicate<Block> allowed, int color, int budget) {
+        this(name, file, defaults, allowed, color, budget, false);
+    }
+    protected BlockEspModule(String name, String file, Collection<String> defaults, Predicate<Block> allowed, int color, int budget, boolean defaultExposedOnly) {
         super(name, ModuleCategory.VISUALS, false);
         this.allowed = allowed; this.color = color;
-        settings = new BlockEspConfig(FabricLoader.getInstance().getConfigDir().resolve(file), defaults);
+        settings = new BlockEspConfig(FabricLoader.getInstance().getConfigDir().resolve(file), defaults, defaultExposedOnly);
         scanner = new LoadedBlockScanner(budget);
         resolveTargets();
         super.setEnabled(settings.enabled());
@@ -53,6 +56,11 @@ public abstract class BlockEspModule extends Module {
     public boolean tracesEnabled() { return settings.traces(); }
     public boolean blockHighlightEnabled() { return settings.outlines(); }
     public int searchRadius() { return settings.radius(); }
+    public boolean exposedOnly() { return settings.exposedOnly(); }
+    public void setExposedOnly(boolean value) {
+        if (value == settings.exposedOnly()) return;
+        settings.exposedOnly(value); clear("Exposure filter changed; scan queued");
+    }
     public int detectedCount() { return scanner.points().size(); }
     public int scannedChunkCount() { return scanner.scannedCount(); }
     public int loadedChunkCount() { return scanner.loadedCount(); }
@@ -94,12 +102,7 @@ public abstract class BlockEspModule extends Module {
         ClientLevel level = client.level;
         if (!supportsLevel(level)) { clear(unavailableWorldMessage()); return; }
         if (targetBlocks.isEmpty()) { clear("No available targets selected"); return; }
-        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
-        LoadedBlockScanner.World world = new LoadedBlockScanner.World() {
-            @Override public int minY() { return level.getMinY(); }
-            @Override public int maxY() { return ScanHeight.maxYExclusive(level); }
-            @Override public boolean loaded(int x, int z) { return level.hasChunkAt(cursor.set(x * 16, level.getMinY(), z * 16)); }
-            @Override public boolean matches(int x, int y, int z) { return targetBlocks.contains(level.getBlockState(cursor.set(x, y, z)).getBlock()); }
+        LoadedBlockScanner.World world = new BlockTargetProbe(level, level::hasChunkAt, targetBlocks, exposedOnly()) {
             @Override public boolean emptySection(int x, int z, int y) {
                 return loaded(x, z) && level.getChunk(x, z).getSection(level.getSectionIndex(y)).hasOnlyAir();
             }
@@ -111,7 +114,9 @@ public abstract class BlockEspModule extends Module {
         // Revalidate these visible candidates immediately, within a fixed 48-position budget.
         nearest = scanner.nearestMatching(world, camera.x, camera.y, camera.z, MAX_RENDERED_BLOCKS);
         scanStatus = scanner.loadedCount() == 0 ? "Waiting for loaded chunks"
-                : scanner.pendingCount() > 0 ? "Scanning · " + scannedChunkCount() + "/" + loadedChunkCount()
+                : scanner.pendingCount() > 0 ? (exposedOnly() ? "Exposed scan · " : "Scanning · ") + scannedChunkCount() + "/" + loadedChunkCount()
+                : exposedOnly() ? detectedCount() + " exposed · unverified"
+                : this instanceof AncientDebrisFinderModule ? detectedCount() + " client matches · unverified"
                 : detectedCount() == 0 ? "No matches · auto-refresh on" : detectedCount() + " matches · auto-refresh on";
     }
 

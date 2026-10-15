@@ -3,6 +3,7 @@ package dev.chunkfinder;
 import com.google.gson.JsonParser;
 import dev.chunkfinder.settings.BlockEspConfig;
 import dev.chunkfinder.settings.OverlayConfig;
+import dev.chunkfinder.settings.FreecamConfig;
 import dev.chunkfinder.core.ChunkRange;
 import dev.chunkfinder.core.FreecamMovement;
 import dev.chunkfinder.core.FreecamMovement.Vector;
@@ -34,6 +35,7 @@ public final class ModuleRegressionTest {
     public static void main(String[] args) throws Exception {
         ids(); selection(); nearest(); configuration(); scanner(); freecamMovement(); visibleCandidates(); chunkRange(); snapshotPublication();
         assertions += TrajectoryRegressionTest.run();
+        assertions += FilterSettingsRegressionTest.run();
         System.out.println("Module regression tests passed (" + assertions + " assertions).");
         System.out.println("Uses fake loaded-world access; not an in-game rendering or anti-cheat test.");
     }
@@ -203,8 +205,8 @@ public final class ModuleRegressionTest {
             dropped.setTargets(Set.of());
             check(new OverlayConfig(items, 48, 16, 128, "itemIds", Set.of("minecraft:diamond")).targets().isEmpty(), "empty item list survives restart");
             Path freecam = directory.resolve("freecam.json");
-            OverlayConfig scalar = new OverlayConfig(freecam, 5, 1, 10); scalar.setRange(100);
-            eq(10, scalar.range(), "freecam scalar bounds retained");
+            FreecamConfig scalar = new FreecamConfig(freecam); scalar.speed(100);
+            eq(10, scalar.speed(), "freecam scalar bounds retained");
             var scalarJson = JsonParser.parseString(Files.readString(freecam)).getAsJsonObject();
             check(!scalarJson.has("entityIds") && !scalarJson.has("itemIds"), "non-ESP overlays do not gain target lists");
             try (var stream = Files.list(directory)) { check(stream.noneMatch(p -> p.toString().endsWith(".tmp")), "atomic save leaves no temporary files"); }

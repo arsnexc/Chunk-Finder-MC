@@ -89,6 +89,8 @@ public final class ModuleSettingsScreen extends Screen {
         if (module instanceof FreecamModule freecam) {
             list.add(slider("speed", "Speed", "Camera movement speed · Hold Sprint to move faster",
                     freecam::speed, 1, 10, freecam::setSpeed));
+            list.add(toggle("swap-strafe", "Swap A/D", "Reverse only lateral movement for your preferred control layout", freecam::swapStrafe,
+                    () -> freecam.setSwapStrafe(!freecam.swapStrafe())));
         } else if (module instanceof ChunkFinderModule chunk) {
             list.add(slider("sensitivity", "Sensitivity", "Higher values accept weaker activity clues",
                     chunk::sensitivity, 1, 10, value -> chunk.adjustSensitivity(value - chunk.sensitivity())));
@@ -101,6 +103,8 @@ public final class ModuleSettingsScreen extends Screen {
                                 ? new BlockPickerScreen(this, blocks)
                                 : new TargetPickerScreen(this, esp.name() + " targets", esp.targetChoices(), esp.targetIds(), esp::setTargetIds))));
             }
+            list.add(toggle("exposed", "Exposed only", "Known air/fluid face only; hides buried replacements, not proof of genuine ore", esp::exposedOnly,
+                    () -> esp.setExposedOnly(!esp.exposedOnly())));
             list.add(radius(esp::searchRadius, esp::setSearchRadius));
             list.add(toggle("traces", "Trace lines", "Connect your view to detected blocks", esp::tracesEnabled,
                     () -> esp.setTracesEnabled(!esp.tracesEnabled())));
@@ -148,7 +152,7 @@ public final class ModuleSettingsScreen extends Screen {
     }
     private static String description(Module module) {
         if (module instanceof ChunkFinderModule) return "Geodes and possible activity clues in loaded chunks";
-        if (module instanceof AncientDebrisFinderModule) return "Locate ancient debris in loaded Nether chunks";
+        if (module instanceof AncientDebrisFinderModule) return "Exposed client-reported debris · server-hidden blocks cannot be verified";
         if (module instanceof ItemEspModule) return "Highlight multiple selected blocks through walls";
         if (module instanceof StorageEspModule) return "Chests, barrels, shulkers and other loaded storage";
         if (module instanceof SpawnerEspModule) return "Mob and trial spawners in loaded chunks";

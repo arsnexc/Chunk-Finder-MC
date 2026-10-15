@@ -1,5 +1,7 @@
 # 2.5.2 — Bounded trajectory previews
 
+> Retained in 2.5.3. See [Freecam/debris fixes](FREECAM_DEBRIS_2_5_3.md) for the latest changes.
+
 This patch improves the existing Trajectories module. Multi-target selections,
 config filenames, UI layout, Freecam controls and the 2.5.1 scanner fixes remain
 unchanged. Replace the older JAR and retain your configs.

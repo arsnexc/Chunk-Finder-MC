@@ -16,6 +16,9 @@ public final class LoadedBlockScanner {
         int maxY(); // exclusive
         boolean loaded(int chunkX, int chunkZ);
         boolean matches(int x, int y, int z);
+        /** Maximum/actual state reads in matches(), including optional neighbor checks. */
+        default int maxMatchReads() { return 1; }
+        default int lastMatchReads() { return 1; }
         default boolean emptySection(int chunkX, int chunkZ, int y) { return false; }
     }
     public record Point(int x, int y, int z) {
@@ -64,6 +67,8 @@ public final class LoadedBlockScanner {
         if (world.maxY() <= world.minY()) { clear(); return; }
         if (cx != centerX || cz != centerZ || r != radius || tick >= nextDiscovery)
             discover(world, cx, cz, r);
+        int maxReads = world.maxMatchReads();
+        if (maxReads < 1 || maxReads > budget) throw new IllegalArgumentException("Invalid match read budget");
         validateOneChunk(world);
         int remaining = budget;
         while (remaining > 0) {
@@ -87,6 +92,9 @@ public final class LoadedBlockScanner {
                     scan.cursor += 4096;
                     remaining--; // Empty-section skips are bounded too.
                 } else {
+                    // Reserve the worst case, then charge actual work. Non-target
+                    // blocks still cost one read even when exposure filtering is on.
+                    if (remaining < maxReads) { remaining = 0; break; }
                     int local = scan.cursor % 256;
                     int x = scan.chunk.x * 16 + local / 16, z = scan.chunk.z * 16 + local % 16;
                     if (world.matches(x, y, z)) {
@@ -94,7 +102,9 @@ public final class LoadedBlockScanner {
                                 + square(z + 0.5 - scan.originZ);
                         if (scan.found.accepts(distance)) scan.found.offer(new Point(x, y, z), distance);
                     }
-                    scan.cursor++; remaining--;
+                    int reads = world.lastMatchReads();
+                    if (reads < 0 || reads > maxReads) throw new IllegalStateException("Match exceeded declared read budget");
+                    scan.cursor++; remaining -= Math.max(1, reads);
                 }
             }
             if (scan.cursor >= scan.total) {
@@ -199,6 +209,7 @@ public final class LoadedBlockScanner {
         return List.copyOf(live);
     }
     public int maxBlockReadsPerTick() { return budget + MATCHES_PER_CHUNK; }
+    public int maxBlockReadsPerTick(World world) { return budget + MATCHES_PER_CHUNK * world.maxMatchReads(); }
     public int loadedCount() { return loaded; }
     public int scannedCount() { return results.size(); }
     public int pendingCount() { return queue.size() + (active == null ? 0 : 1); }

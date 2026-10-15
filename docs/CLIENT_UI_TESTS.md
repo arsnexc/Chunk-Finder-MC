@@ -2,7 +2,7 @@
 
 The separate `src/gametest` test mod uses Fabric's client game-test API to launch
 a real **Minecraft 1.21.11** client and exercise the production screens. A second
-entrypoint checks native height and trajectory API contracts with synthetic block access. Both
+entrypoint checks native height, trajectory, camera/input and exposure contracts with synthetic block access. Both
 are excluded from the installable Chunk Finder JAR.
 
 ## Recorded result
@@ -14,7 +14,7 @@ The newly built 2.5.0 JAR was byte-for-byte identical to the prior 2.5.0 artifac
 that 2.5.0 follow-up added tests and CI support, not gameplay changes. The later
 [2.5.1 patch](MODULE_FIXES_2_5_1.md) contains runtime fixes and the additional
 height API-contract entrypoint. The [2.5.2 patch](TRAJECTORY_FIXES_2_5_2.md) adds
-trajectory traversal/collision contracts; consult the intended build for current results.
+trajectory traversal/collision contracts; [2.5.3](FREECAM_DEBRIS_2_5_3.md) adds native camera/input and exposure-filter checks. Consult the intended build for current results.
 
 ## UI coverage
 
@@ -44,6 +44,12 @@ voxel traversal and vanilla collision shapes, with synthetic block/chunk data.
 These cover unloaded gaps, negative coordinates, diagonal edges, endpoint epsilon,
 availability-query reuse and prediction limits. No `ClientLevel` or server is
 created. They do not exercise live projectile rendering or gameplay timing.
+
+`ClientFreecamContractChecks` tests native camera axes, real remappable movement
+bindings, toggle-state masking and perspective restoration. `ClientExposureContractChecks`
+uses native air/fluid/debris states with synthetic loaded chunks to test buried
+replacement suppression and read budgets. Neither test creates a player/world
+or establishes that server-reported exposed debris is genuine.
 
 The test run directory is **`build/run/clientGameTest`**. Only that isolated
 run's configs are changed. The client tests do not open/create a world or run a
