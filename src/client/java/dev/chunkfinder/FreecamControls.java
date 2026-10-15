@@ -40,7 +40,10 @@ final class FreecamControls extends Camera {
         previousView = null;
     }
     FreecamMovement.Vector movement(float yaw, float pitch, Input input, int speed, boolean swapStrafe) {
-        setRotation(yaw, pitch); // Minecraft owns the screen-left/forward convention.
+        return movement(yaw, pitch, input, speed, swapStrafe, false);
+    }
+    FreecamMovement.Vector movement(float yaw, float pitch, Input input, int speed, boolean swapStrafe, boolean horizontal) {
+        setRotation(yaw, horizontal ? 0 : pitch); // Native basis; only movement ignores pitch in horizontal mode.
         var look = forwardVector(); var left = leftVector();
         int forward = (input.forward() ? 1 : 0) - (input.backward() ? 1 : 0);
         int strafe = (input.right() ? 1 : 0) - (input.left() ? 1 : 0);

@@ -1,6 +1,9 @@
 package dev.chunkfinder;
 
 import dev.chunkfinder.core.FreecamMovement;
+import dev.chunkfinder.core.FlightSmoothing;
+import dev.chunkfinder.core.TerrainBoundary;
+import net.minecraft.core.BlockPos;
 import dev.chunkfinder.settings.FreecamConfig;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
@@ -20,6 +23,8 @@ public final class FreecamModule extends Module {
     private LocalPlayer owner;
     private Entity previousCamera;
     private Input captured;
+    private final FlightSmoothing smoothing = new FlightSmoothing();
+    private TerrainBoundary.Status boundary = TerrainBoundary.Status.AVAILABLE;
 
     public FreecamModule() { super("Freecam", ModuleCategory.VISUALS, false); }
 
@@ -38,6 +43,14 @@ public final class FreecamModule extends Module {
         Minecraft client = Minecraft.getInstance();
         if (isEnabled() && valid(client) && value) terrain.begin(client); else terrain.end(client);
     }
+    public TerrainBoundary.Status boundary() { return boundary; }
+    public boolean horizontalFlight() { return settings.horizontal(); }
+    public void setHorizontalFlight(boolean v) { settings.horizontal(v); smoothing.reset(); }
+    public int acceleration() { return settings.acceleration(); }
+    public int deceleration() { return settings.deceleration(); }
+    public void setAcceleration(int v) { settings.acceleration(v); smoothing.reset(); }
+    public void setDeceleration(int v) { settings.deceleration(v); smoothing.reset(); }
+    public void nextSpeedPreset() { setSpeed(speed() < 5 ? 5 : speed() < 10 ? 10 : 2); }
     public int speed() { return settings.speed(); }
     public void setSpeed(int value) { settings.speed(value); }
     public boolean swapStrafe() { return settings.swapStrafe(); }
@@ -51,6 +64,7 @@ public final class FreecamModule extends Module {
         if (!FeatureAccess.allowed(client) || client.player.isRemoved() || !client.player.isAlive()) return false;
         Entity detached = EntityType.MARKER.create(client.level, EntitySpawnReason.LOAD);
         if (detached == null) return false;
+        smoothing.reset();
         owner = client.player;
         previousCamera = client.getCameraEntity();
         camera = detached;
@@ -94,7 +108,10 @@ public final class FreecamModule extends Module {
         controls.enforceView(client.options);
         terrain.enforce(client);
         camera.setOldPosAndRot();
-        if (captured != null && client.screen == null) moveCamera();
+        if (captured != null && client.screen == null) moveCamera(); else smoothing.reset();
+        BlockPos.MutableBlockPos probe = new BlockPos.MutableBlockPos();
+        boundary = TerrainBoundary.check(camera.getBlockX(), camera.getBlockZ(),
+                (x, z) -> client.level.hasChunkAt(probe.set(x * 16, client.level.getMinY(), z * 16)));
         restoreInputs(client);
     }
 
@@ -106,7 +123,7 @@ public final class FreecamModule extends Module {
     }
 
     private void moveCamera() {
-        FreecamMovement.Vector movement = controls.movement(camera.getYRot(), camera.getXRot(), captured, speed(), swapStrafe());
+        FreecamMovement.Vector movement = smoothing.step(controls.movement(camera.getYRot(), camera.getXRot(), captured, speed(), swapStrafe(), horizontalFlight()), acceleration(), deceleration());
         if (movement.x() != 0 || movement.y() != 0 || movement.z() != 0)
             camera.setPos(camera.getX() + movement.x(), camera.getY() + movement.y(), camera.getZ() + movement.z());
     }
@@ -118,6 +135,7 @@ public final class FreecamModule extends Module {
     }
 
     private void stop(Minecraft client) {
+        smoothing.reset(); boundary = TerrainBoundary.Status.AVAILABLE;
         restoreInputs(client);
         terrain.end(client);
         // Restore our perspective only when we still own the camera, or vanilla

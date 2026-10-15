@@ -6,14 +6,24 @@ import java.nio.file.Path;
 public final class FreecamConfig {
     private final JsonConfig config;
     private int speed;
-    private boolean swapStrafe, fullTerrain;
+    private boolean swapStrafe, fullTerrain, horizontal;
+    private int acceleration, deceleration;
 
     public FreecamConfig(Path file) {
         config = new JsonConfig(file);
         speed = config.integer("range", 5, 1, 10);
         swapStrafe = config.bool("swapStrafe", false);
         fullTerrain = config.bool("fullTerrain", true);
+        horizontal = config.bool("horizontalFlight", false);
+        acceleration = config.integer("accelerationTicks", 0, 0, 30);
+        deceleration = config.integer("decelerationTicks", 0, 0, 30);
     }
+    public boolean horizontal() { return horizontal; }
+    public void horizontal(boolean v) { if (horizontal != v) { horizontal = v; save(); } }
+    public int acceleration() { return acceleration; }
+    public int deceleration() { return deceleration; }
+    public void acceleration(int v) { int n = Math.max(0, Math.min(30, v)); if (n != acceleration) { acceleration = n; save(); } }
+    public void deceleration(int v) { int n = Math.max(0, Math.min(30, v)); if (n != deceleration) { deceleration = n; save(); } }
     public int speed() { return speed; }
     public boolean fullTerrain() { return fullTerrain; }
     public void fullTerrain(boolean value) { if (fullTerrain != value) { fullTerrain = value; save(); } }
@@ -26,6 +36,7 @@ public final class FreecamConfig {
         if (swapStrafe != value) { swapStrafe = value; save(); }
     }
     private void save() {
-        config.put("range", speed); config.put("swapStrafe", swapStrafe); config.put("fullTerrain", fullTerrain); config.save();
+        config.put("range", speed); config.put("swapStrafe", swapStrafe); config.put("fullTerrain", fullTerrain);
+        config.put("horizontalFlight", horizontal); config.put("accelerationTicks", acceleration); config.put("decelerationTicks", deceleration); config.save();
     }
 }

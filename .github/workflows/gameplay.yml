@@ -1,0 +1,91 @@
+name: Gameplay and renderer validation
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: gameplay-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  gameplay:
+    name: World scenarios / ${{ matrix.renderer }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        renderer: [vanilla, sodium, iris]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+      - name: Prepare native renderer
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb xauth libgl1-mesa-dri flite1-dev adwaita-icon-theme
+          python3 scripts/test-renderers.py '${{ matrix.renderer }}' "$RUNNER_TEMP/chunkfinder-renderers"
+      - name: Isolated single-player gameplay and measurements
+        id: world
+        timeout-minutes: 25
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          ALSOFT_DRIVERS: 'null'
+          CHUNKFINDER_WORLD_TEST: '1'
+          CHUNKFINDER_RENDERER: '${{ matrix.renderer }}'
+        run: |
+          set -o pipefail
+          timeout --signal=TERM --kill-after=30s 23m xvfb-run -a -s '-screen 0 1280x720x24' \
+            ./gradlew --no-daemon --no-configuration-cache runClientGameTest \
+              -PtestRenderer='${{ matrix.renderer }}' -PrendererModsDir="$RUNNER_TEMP/chunkfinder-renderers" \
+              2>&1 | tee "$RUNNER_TEMP/gameplay.log"
+      - name: Publish bounded evidence and measurements
+        if: always()
+        env:
+          VARIANT: '${{ matrix.renderer }}'
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          report = Path('build/run/clientGameTest/gameplay-report.json')
+          if report.exists():
+              data = json.loads(report.read_text())
+              print('::notice title=Gameplay measurements::' + json.dumps(data, separators=(',', ':')))
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+                  summary.write('## ' + os.environ['VARIANT'] + '\n\n```json\n' + json.dumps(data, indent=2) + '\n```\n')
+          else:
+              for path in [Path(os.environ['RUNNER_TEMP']) / 'gameplay.log', Path('build/run/clientGameTest/logs/latest.log')]:
+                  if not path.exists(): continue
+                  lines = path.read_text(errors='replace').splitlines()[-180:]
+                  text = '\n'.join(line if len(line)<600 else line[:400]+' ... '+line[-190:] for line in lines)[-18000:]
+                  for offset in range(0, len(text), 3200):
+                      chunk = text[offset:offset+3200].replace('%','%25').replace('\r','%0D').replace('\n','%0A')
+                      print(f'::error title=Gameplay {path.name} diagnostics {offset//3200+1}::{chunk}')
+          PY
+      - name: Require completed gameplay evidence
+        if: success()
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('build/run/clientGameTest/gameplay-report.json').read_text())
+          assert report['result'] == 'passed'
+          assert report['modulesEnabled']['cpuFrame']['samples'] > 30
+          PY
+      - name: Upload isolated test evidence only
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: gameplay-${{ matrix.renderer }}-evidence
+          path: |
+            build/run/clientGameTest/gameplay-report.json
+            build/run/clientGameTest/screenshots/*.png
+            build/run/clientGameTest/logs/latest.log
+            ${{ runner.temp }}/chunkfinder-renderers/renderer-lock.json
+          if-no-files-found: warn
+          retention-days: 30

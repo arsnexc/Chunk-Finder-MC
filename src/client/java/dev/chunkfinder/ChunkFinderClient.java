@@ -21,10 +21,18 @@ public final class ChunkFinderClient implements ClientModInitializer {
             "key.chunkfinder.open_modules", InputConstants.Type.KEYSYM, InputConstants.KEY_K, CATEGORY));
     private static final KeyMapping TOGGLE_FREECAM = KeyBindingHelper.registerKeyBinding(new KeyMapping(
             "key.chunkfinder.toggle_freecam", InputConstants.Type.KEYSYM, InputConstants.KEY_G, CATEGORY));
+    private static final KeyMapping FREECAM_SPEED = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+            "key.chunkfinder.freecam_speed", InputConstants.Type.KEYSYM, InputConstants.KEY_V, CATEGORY));
+    private static ChunkFinderClient instance;
     private final ModuleManager modules = new ModuleManager();
+    public static ModuleManager modules() {
+        if (instance == null) throw new IllegalStateException("Client has not initialized");
+        return instance.modules;
+    }
 
     @Override
     public void onInitializeClient() {
+        instance = this;
         ServerAuthorization.register();
         ClientTickEvents.START_CLIENT_TICK.register(modules.freecam()::beginTick);
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
@@ -36,6 +44,7 @@ public final class ChunkFinderClient implements ClientModInitializer {
                     LOGGER.info("Freecam needs a loaded world and player.");
                 }
             }
+            while (FREECAM_SPEED.consumeClick()) if (modules.freecam().isEnabled()) modules.freecam().nextSpeedPreset();
             if (modules.chunkFinder().isEnabled()) modules.chunkFinder().tick(client);
             if (modules.ancientDebrisFinder().isEnabled()) modules.ancientDebrisFinder().tick(client);
             if (modules.itemEsp().isEnabled()) modules.itemEsp().tick(client);
@@ -48,6 +57,7 @@ public final class ChunkFinderClient implements ClientModInitializer {
         });
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "compact_hud"),
                 (graphics, deltaTracker) -> modules.renderHud(Minecraft.getInstance(), graphics));
+        WorldRenderEvents.END_MAIN.register(context -> modules.diagnostics().record(Minecraft.getInstance()));
         WorldRenderEvents.BEFORE_DEBUG_RENDER.register(modules.chunkFinder()::renderWorld);
         WorldRenderEvents.BEFORE_DEBUG_RENDER.register(modules.ancientDebrisFinder()::renderWorld);
         WorldRenderEvents.BEFORE_DEBUG_RENDER.register(modules.itemEsp()::renderWorld);

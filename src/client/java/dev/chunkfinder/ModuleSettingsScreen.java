@@ -32,7 +32,7 @@ public final class ModuleSettingsScreen extends MenuScreen {
                 new Category("player", "Player", Icon.PLAYER, List.of(
                         entry("target", modules.targetRenderer()), entry("trajectories", modules.trajectories())))
         ), this::onClose);
-        gui.preferences(() -> Minecraft.getInstance().setScreen(new InterfaceSettingsScreen(this, preferences)));
+        gui.preferences(() -> Minecraft.getInstance().setScreen(new InterfaceSettingsScreen(this, modules)));
     }
 
     @Override protected void init() {
@@ -54,6 +54,10 @@ public final class ModuleSettingsScreen extends MenuScreen {
         if (module instanceof FreecamModule freecam) {
             list.add(slider("speed", "Speed", "Camera movement speed · Hold Sprint to move faster",
                     freecam::speed, 1, 10, freecam::setSpeed));
+            list.add(toggle("horizontal", "Horizontal flight", "Forward/back stay level; Space/Shift remain vertical", freecam::horizontalFlight, () -> freecam.setHorizontalFlight(!freecam.horizontalFlight())));
+            list.add(slider("accel", "Acceleration", "Ticks to ramp up; zero keeps immediate controls", freecam::acceleration, 0, 30, freecam::setAcceleration));
+            list.add(slider("brake", "Braking", "Ticks to stop; zero stops immediately", freecam::deceleration, 0, 30, freecam::setDeceleration));
+            list.add(new Action("preset", "Speed preset", "Cycle 2x / 5x / 10x; V while Freecam is active", () -> freecam.speed() + "x", freecam::nextSpeedPreset));
             list.add(toggle("terrain", "Full terrain", "Disable section occlusion while flying; uses only loaded data and may cost FPS", freecam::fullTerrain,
                     () -> freecam.setFullTerrain(!freecam.fullTerrain())));
             list.add(toggle("swap-strafe", "Swap A/D", "Reverse only lateral movement for your preferred control layout", freecam::swapStrafe,

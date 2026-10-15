@@ -8,7 +8,8 @@
   "entrypoints": {
     "fabric-client-gametest": [
       "dev.chunkfinder.ClientScreenSmokeTest",
-      "dev.chunkfinder.ClientModuleContractTest"
+      "dev.chunkfinder.ClientModuleContractTest",
+      "dev.chunkfinder.ClientGameplayTest"
     ]
   },
   "depends": {

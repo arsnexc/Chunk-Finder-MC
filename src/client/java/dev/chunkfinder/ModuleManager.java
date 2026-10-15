@@ -9,6 +9,8 @@ import net.fabricmc.loader.api.FabricLoader;
 import java.util.ArrayList;
 
 public final class ModuleManager {
+    private final RuntimeDiagnostics diagnostics = new RuntimeDiagnostics();
+    public RuntimeDiagnostics diagnostics() { return diagnostics; }
     private final InterfaceConfig interfaceSettings = new InterfaceConfig(FabricLoader.getInstance().getConfigDir().resolve("chunkfinder-ui.json"));
     public InterfaceConfig interfaceSettings() { return interfaceSettings; }
     private final ChunkFinderModule chunkFinder = new ChunkFinderModule();
@@ -27,6 +29,9 @@ public final class ModuleManager {
     public void renderHud(Minecraft client, GuiGraphics graphics) {
         if (!interfaceSettings.hud() || !FeatureAccess.allowed(client) || client.options.hideGui || client.screen != null) return;
         List<CompactHud.Row> rows = new ArrayList<>();
+        if (freecam.isEnabled() && freecam.boundary() != dev.chunkfinder.core.TerrainBoundary.Status.AVAILABLE)
+            rows.add(new CompactHud.Row("Terrain", freecam.boundary() == dev.chunkfinder.core.TerrainBoundary.Status.EDGE ? "EDGE" : "UNLOADED",
+                    "Player-loaded data ends here; no chunk requests", 0xFFFFBF69));
         if (freecam.isEnabled()) rows.add(new CompactHud.Row("Freecam", freecam.speed() + "x", freecam.hudDetails(), 0xFF8CE0BD));
         if (chunkFinder.isEnabled()) rows.add(new CompactHud.Row(chunkFinder.strictBaseClues() ? "Base clues" : "Activity hints",
                 Long.toString(chunkFinder.baseCount()), chunkFinder.hudDetails(), chunkFinder.colors().color("chunkfinder:base_clue", 0xFFFFCE8D)));

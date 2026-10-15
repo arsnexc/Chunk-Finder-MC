@@ -89,3 +89,15 @@ publishing {
         create("mavenJava", MavenPublication) { from components.java }
     }
 }
+
+// Optional compatibility-test mods. No include() and no production metadata dependency.
+// Files are downloaded/hash-checked by CI into a temporary directory outside build/.
+def testRenderer = providers.gradleProperty('testRenderer').getOrElse('vanilla')
+if (!(testRenderer in ['vanilla', 'sodium', 'iris'])) throw new GradleException('Unknown test renderer')
+if (testRenderer != 'vanilla') {
+    def directory = providers.gradleProperty('rendererModsDir').get()
+    dependencies {
+        modRuntimeOnly files("${directory}/sodium.jar")
+        if (testRenderer == 'iris') modRuntimeOnly files("${directory}/iris.jar")
+    }
+}
