@@ -9,18 +9,18 @@ heuristic player-ownership detection. No PR may be merged without permission.
 
 | # | Acceptance gate | Status |
 |---|---|---|
-| 1 | Isolated real single-player scenarios: underground/boundary Freecam, dimension transfer, death/respawn; separate vanilla/Sodium/Iris runs | RC2 passed 31 real-world assertions per renderer (38722682104); final 2.7 adds compiled/visible section assertion |
+| 1 | Isolated real single-player scenarios: underground/boundary Freecam, dimension transfer, death/respawn; separate vanilla/Sodium/Iris runs | Final 2.7.0 passed 34 real-world assertions per renderer, including compiled/visible cave sections (38723920129) |
 | 2 | Loaded-terrain edge warning, without sending chunk requests | Passed actual resident-edge and missing-chunk checks on all three renderers |
 | 3 | Received block updates invalidate stale results and prioritize bounded rescans | Passed real mining/placement update checks; controlled-fixture latency 2 ticks |
 | 4 | Shared bounded block-read cache with hit/miss/read accounting and fair scheduling | Passed shared-state reuse, bounded read/cache checks and rotating scheduling; measured counters recorded |
 | 5 | Per-target priority, distance and display caps; common blocks cannot evict every rare target | Passed headless, native policy UI/API and real dense-stone/rare-ore display-cap scenarios |
-| 6 | Optional version/renderer/chunk/queue/filter diagnostics page | Implemented read-only diagnostics with live version/renderer/queue/filter/measurement data; native build verified |
+| 6 | Optional version/renderer/chunk/queue/filter diagnostics page | Passed native diagnostics navigation/version-data checks; live renderer, queue/filter and measured telemetry are available |
 | 7 | Header drag reorder, saved snapped positions and reset; keyboard equivalent | Passed saved snapped-column drag/reorder/reset tests and native pointer interaction; Shift+arrows equivalent |
 | 8 | Module/setting/action search and saved favorites | Passed reveal-only search and saved favorites tests, including native Ctrl+F/Ctrl+D paths |
 | 9 | HUD drag anchors, row visibility/pins, opacity and hide-zero controls | Passed normalized placement bounds, per-row visibility/pins/zero filtering, opacity and native placement save |
 | 10 | Colorblind-friendly presets, validated local import/export and legend | Passed preset, legend data, local palette validation/roundtrip and native export/import-preview/cancel paths |
 | 11 | Local profiles, explicit preview/apply, backups and rollback/default restoration | Passed allowlist/path/symlink/schema/rollback tests, native preview/cancel/apply, and real-world profile reload with active Freecam |
-| 12 | Zoom/resize/focus/narration and optional-animation regression matrix | Passed 1021 headless UI assertions and 89 native UI assertions including zoom/window matrix, resize, focus and narration |
+| 12 | Zoom/resize/focus/narration and optional-animation regression matrix | Passed 1,021 headless UI and 92 native UI assertions including zoom/window matrix, resize, focus and narration |
 | 13 | Cross-chunk base evidence, deduplication and unload/dimension invalidation | Passed cross-chunk merge/dedup/invalidation tests and real boundary-spanning clue scenario |
 | 14 | Human-readable evidence and reversible ignored clues | Passed real evidence explanation and ignore/restore scenario; session/world-scoped ignores are explicit |
 | 15 | Optional horizontal flight, acceleration/deceleration and speed presets | Passed native camera/input checks, real horizontal/braking/preset movement and lifecycle reset scenarios |
@@ -101,3 +101,24 @@ section check (including Sodium's actual visibility API, not merely compilation)
 Its final result is the matching same-commit Actions run, not an assumed pass.
 No external/public-server, arbitrary shader-pack, all-hardware or anti-cheat
 compatibility claim is made. No PR has been merged.
+
+## Final 2.7.0 acceptance
+
+**Run [38723920129](https://github.com/arsnexc/Chunk-Finder-MC/actions/runs/38723920129),
+commit `292813a85d73a5f8b3e83c1979b54e9184abd9eb`, passed every required gate.**
+
+- 1,021 headless UI assertions; 1,594 module assertions.
+- 92 native UI assertions; 352 native API/contract assertions.
+- **34 real-world assertions per renderer**, including compiled-and-visible
+  underground cave sections, actual movement/boundary/lifecycle behavior,
+  received updates, dense/common-vs-rare target policies, cross-chunk evidence,
+  UI ignore/restore and live profile reloads.
+- Vanilla Fabric, Sodium 0.8.14 and Iris 1.10.8 + Sodium, with shaders disabled.
+- All measured CI performance gates and final JAR identity verification passed.
+- JAR SHA-256: `cf24fea7a20fc22d981362043a46df004b7f0333f3f41e78b2edbd838f3b41de`.
+
+Exact measurements are committed in `tests/performance/ci-mesa-2.7.0.json`.
+The controlled fixture measured 15 ticks for first scan and 2 ticks for an
+incoming block update on every renderer. This is not a worst-case server or
+desktop-GPU guarantee. Shader packs, unrelated mod combinations and external
+servers remain outside the tested matrix. No PR was merged.
