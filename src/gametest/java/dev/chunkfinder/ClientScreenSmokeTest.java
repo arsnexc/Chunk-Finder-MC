@@ -8,6 +8,8 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.util.Util;
 import org.lwjgl.glfw.GLFW;
 
 import java.io.IOException;
@@ -79,9 +81,8 @@ public final class ClientScreenSmokeTest implements FabricClientGameTest {
         clickPoint(context, ui -> new double[]{ui.search().x() + 8, ui.search().y() + 9});
         context.getInput().typeChars("x");
         check(context.computeOnClient(client -> search(client).getValue().equals("xminecraft:diamond_ore")), "native search hit-testing puts the caret at the clicked beginning");
-        context.getInput().holdControl();
-        context.getInput().pressKey(GLFW.GLFW_KEY_A);
-        context.getInput().releaseControl();
+        keyWithModifiers(context, GLFW.GLFW_KEY_A,
+                Util.getPlatform() == Util.OS.OSX ? GLFW.GLFW_MOD_SUPER : GLFW.GLFW_MOD_CONTROL);
         context.getInput().typeChars("minecraft:diamond_ore");
         check(context.computeOnClient(client -> search(client).getValue().equals("minecraft:diamond_ore")), "Ctrl+A and replacement text use the native edit box");
         context.getInput().pressKey(GLFW.GLFW_KEY_DOWN);
@@ -90,9 +91,7 @@ public final class ClientScreenSmokeTest implements FabricClientGameTest {
         context.waitTick();
         check(context.computeOnClient(client -> search(client).getValue().equals("minecraft:diamond_ore")), "resize retains query");
         screenshot(context, "picker-native-854x480");
-        context.getInput().holdControl();
-        context.getInput().pressKey(GLFW.GLFW_KEY_ENTER);
-        context.getInput().releaseControl();
+        keyWithModifiers(context, GLFW.GLFW_KEY_ENTER, GLFW.GLFW_MOD_CONTROL);
         check(context.computeOnClient(client -> blocks.targetIds().equals(Set.of("minecraft:diamond_ore"))), "keyboard draft survives resize and Ctrl+Enter applies");
 
         // Selected-only removal changes visible rows; hidden selected entries must survive.
@@ -157,6 +156,16 @@ public final class ClientScreenSmokeTest implements FabricClientGameTest {
         });
     }
     private void screenshot(ClientGameTestContext context, String name) { screenshots.add(context.takeScreenshot(name).toString()); }
+    private void keyWithModifiers(ClientGameTestContext context, int key, int modifiers) {
+        // Fabric API 0.141.6's TestInput constructs KeyEvent(..., modifiers=0), even
+        // when holdControl/holdShift is active. Send the real event to the native
+        // screen boundary; do not weaken the assertions or change production input.
+        check(context.computeOnClient(client -> {
+            client.screen.afterKeyboardAction();
+            return client.screen.keyPressed(new KeyEvent(key, 0, modifiers));
+        }), "native screen consumes modified key " + key);
+        context.waitTick();
+    }
     private static EditBox search(Minecraft client) {
         return client.screen.children().stream().filter(EditBox.class::isInstance).map(EditBox.class::cast).findFirst().orElseThrow();
     }

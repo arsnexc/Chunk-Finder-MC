@@ -49,6 +49,14 @@ Native screenshots, the smoke-test report and the client log are uploaded in
 Git. Consult the run result for whether this test actually passed; merely adding
 the test does not establish that it ran successfully.
 
+## Input-driver note
+
+Fabric API 0.141.6's `TestInput` sends `KeyEvent` with zero modifier flags, even
+when its held-key state includes Ctrl. The test therefore sends Ctrl+A (Cmd+A on
+macOS) and Ctrl+Enter as explicit native `KeyEvent`s to the actual screen handlers.
+Ordinary typing, caret clicks, row keys, mouse buttons and resizing use Fabric's
+input driver. This tests native UI behavior, not operating-system keyboard wiring.
+
 ## Limits
 
 These are real-client **UI** checks, not a manual gameplay session. They do not

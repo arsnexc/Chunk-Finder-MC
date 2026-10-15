@@ -59,7 +59,7 @@ jobs:
       - name: Set up software-rendered client tests
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y xvfb xauth libgl1-mesa-dri
+          sudo apt-get install -y xvfb xauth libgl1-mesa-dri flite1-dev adwaita-icon-theme
 
       - name: Minecraft client UI smoke tests
         id: client_smoke
