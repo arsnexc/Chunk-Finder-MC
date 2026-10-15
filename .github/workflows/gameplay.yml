@@ -2,6 +2,11 @@ name: Gameplay and renderer validation
 on:
   push:
   workflow_dispatch:
+    inputs:
+      renderers:
+        description: 'JSON renderer list for focused debugging'
+        required: false
+        default: '["vanilla","sodium","iris"]'
 permissions:
   contents: read
 concurrency:
@@ -15,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        renderer: [vanilla, sodium, iris]
+        renderer: ${{ fromJSON(inputs.renderers || '["vanilla","sodium","iris"]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -61,7 +66,8 @@ jobs:
           else:
               for path in [Path(os.environ['RUNNER_TEMP']) / 'gameplay.log', Path('build/run/clientGameTest/logs/latest.log')]:
                   if not path.exists(): continue
-                  lines = path.read_text(errors='replace').splitlines()[-180:]
+                  all_lines = path.read_text(errors='replace').splitlines()
+                  lines = [line for line in all_lines if 'World loading finished:' not in line][-220:]
                   text = '\n'.join(line if len(line)<600 else line[:400]+' ... '+line[-190:] for line in lines)[-18000:]
                   for offset in range(0, len(text), 3200):
                       chunk = text[offset:offset+3200].replace('%','%25').replace('\r','%0D').replace('\n','%0A')

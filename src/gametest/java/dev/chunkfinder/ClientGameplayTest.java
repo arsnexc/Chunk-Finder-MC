@@ -22,6 +22,21 @@ import java.util.Set;
 public final class ClientGameplayTest implements FabricClientGameTest {
     private int assertions;
     private void check(boolean value, String message) { assertions++; if (!value) throw new AssertionError(message); }
+    private net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext createWorld(ClientGameTestContext context) {
+        try { return context.worldBuilder().create(); }
+        catch (RuntimeException | AssertionError failure) {
+            context.runOnClient(client -> System.err.println("WORLD_LOAD_STATE screen=" + client.screen + " level=" + client.level
+                    + " player=" + client.player + " integratedServer=" + client.getSingleplayerServer()));
+            for (var entry : Thread.getAllStackTraces().entrySet()) {
+                String name = entry.getKey().getName();
+                if (!name.equals("Server thread") && !name.equals("Render thread")) continue;
+                System.err.println("WORLD_LOAD_THREAD " + name + " " + entry.getKey().getState());
+                for (int i=0;i<Math.min(35,entry.getValue().length);i++) System.err.println("  " + entry.getValue()[i]);
+            }
+            context.takeScreenshot("world-load-failure");
+            throw failure;
+        }
+    }
     @Override public void runTest(ClientGameTestContext context) {
         if (!"1".equals(System.getenv("CHUNKFINDER_WORLD_TEST"))) {
             System.out.println("Gameplay scenarios skipped (explicit CI opt-in required)."); return;
@@ -38,7 +53,7 @@ public final class ClientGameplayTest implements FabricClientGameTest {
         context.runOnClient(client -> { client.options.renderDistance().set(4); client.options.guiScale().set(2); client.options.framerateLimit().set(60); });
         context.getInput().resizeWindow(1280,720);
         ModuleManager modules = context.computeOnClient(client -> ChunkFinderClient.modules());
-        try (var world = context.worldBuilder().create()) {
+        try (var world = createWorld(context)) {
             world.getServer().runCommand("gamerule minecraft:immediate_respawn false");
             world.getServer().runCommand("gamerule minecraft:spawner_blocks_work false");
             world.getServer().runCommand("fill 0 60 0 15 88 15 minecraft:stone");

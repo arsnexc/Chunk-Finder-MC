@@ -1,0 +1,17 @@
+{
+  "minecraft": "1.21.11",
+  "sodium": {
+    "id": "rkdTcxoT",
+    "version": "mc1.21.11-0.8.14-fabric",
+    "url": "https://cdn.modrinth.com/data/AANobbMI/versions/rkdTcxoT/sodium-fabric-0.8.14%2Bmc1.21.11.jar",
+    "sha512": "04c43f9e8534b87a52c42ffd51b0e344d4ef92dc9cc52da33d13af6a18bf74b05380d2027f1e0db982698d0aff274c42741c1e21b313b0cd75ed3af005fc98d9",
+    "filename": "sodium-fabric-0.8.14+mc1.21.11.jar"
+  },
+  "iris": {
+    "id": "ka9PDlsN",
+    "version": "1.10.8+1.21.11-fabric",
+    "url": "https://cdn.modrinth.com/data/YL57xq9U/versions/ka9PDlsN/iris-fabric-1.10.8%2Bmc1.21.11.jar",
+    "sha512": "f0cad4b6af593b6fc25738c4ef5a2b346125f9693d25a0d486858e54798d2ea87b24d1497e1bb4391729d7d9e490f42771f7fb468d4e1420e372d8643f9e2055",
+    "filename": "iris-fabric-1.10.8+mc1.21.11.jar"
+  }
+}
