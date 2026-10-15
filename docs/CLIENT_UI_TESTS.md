@@ -1,8 +1,9 @@
-# Native Minecraft UI smoke tests
+# Native Minecraft UI and API-contract checks
 
 The separate `src/gametest` test mod uses Fabric's client game-test API to launch
-a real **Minecraft 1.21.11** client and exercise the production screens. It is
-not included in the installable Chunk Finder JAR.
+a real **Minecraft 1.21.11** client and exercise the production screens. A second
+entrypoint checks native height API contracts with synthetic block access. Both
+are excluded from the installable Chunk Finder JAR.
 
 ## Recorded result
 
@@ -10,9 +11,11 @@ The [first passing native run](https://github.com/arsnexc/Chunk-Finder-MC/action
 on commit `b774d3b` completed **27 native UI assertions**, alongside **872 UI**
 and **984 module** regression assertions. It captured four native screenshots.
 The newly built 2.5.0 JAR was byte-for-byte identical to the prior 2.5.0 artifact:
-this follow-up added tests and CI support, not gameplay changes.
+that 2.5.0 follow-up added tests and CI support, not gameplay changes. The later
+[2.5.1 patch](MODULE_FIXES_2_5_1.md) contains runtime fixes and the additional
+height API-contract entrypoint; consult its build for current results.
 
-## Coverage
+## UI coverage
 
 - Actual custom-font glyph metrics, including the missing-glyph-box regression.
 - Native rendering of the module screen and multi-target picker, with screenshots.
@@ -25,6 +28,15 @@ this follow-up added tests and CI support, not gameplay changes.
 - Real registry choices and Apply callbacks for Storage, Spawner, Entity and
   Dropped Item ESP, not just a fake picker catalog.
 - Font availability after an actual Minecraft resource reload.
+
+## Module API contracts
+
+`ClientModuleContractTest` checks Minecraft's actual inclusive `getMaxY()` API
+against the production scanner adapters. Bottom/top synthetic targets cover
+Overworld, Nether-style, negative and single-layer height ranges. It also checks
+that all 24 full-height empty sections can be skipped without individual block
+reads. These are API/algorithm checks, **not live world scanning**. Their separate
+success marker is required alongside the UI marker before JAR upload.
 
 The test run directory is **`build/run/clientGameTest`**. Only that isolated
 run's configs are changed. The client tests do not open/create a world or run a
@@ -48,9 +60,9 @@ LIBGL_ALWAYS_SOFTWARE=1 ALSOFT_DRIVERS=null \
 
 GitHub Actions runs the normal `./gradlew --no-daemon clean build` first,
 including the existing UI and module regression tasks. It then runs the native
-UI test with software rendering and a bounded timeout. Artifact verification
-requires all three suites to report success and verifies that test classes and
-entrypoints are absent from the installable JAR.
+UI and API-contract tests with software rendering and a bounded timeout. Artifact
+verification requires all four suites to report success and verifies that test
+classes and entrypoints are absent from the installable JAR.
 
 Native screenshots, the smoke-test report and the client log are uploaded in
 **`minecraft-ui-smoke-evidence`**. Generated evidence and game assets stay out of

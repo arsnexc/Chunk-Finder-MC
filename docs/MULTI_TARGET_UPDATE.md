@@ -1,5 +1,9 @@
 # 2.5.0 — Multi-target ESP and module improvements
 
+> The multi-target behavior below is retained in 2.5.1. See
+> [2.5.1 fixes](MODULE_FIXES_2_5_1.md) for corrected scan-height boundaries,
+> candidate eviction, radius guards and Freecam movement, plus updated tests.
+
 ## Using multi-target selection
 
 Open **K**, expand an ESP module, then click **Targets**. Click any number of

@@ -1,5 +1,6 @@
 package dev.chunkfinder;
 
+import dev.chunkfinder.core.FreecamMovement;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -108,20 +109,16 @@ public final class FreecamModule extends Module {
     }
 
     private void moveCamera() {
-        double forward = (up ? 1.0 : 0.0) - (down ? 1.0 : 0.0);
-        double strafe = (right ? 1.0 : 0.0) - (left ? 1.0 : 0.0);
-        double vertical = (jump ? 1.0 : 0.0) - (sneak ? 1.0 : 0.0);
+        int forward = (up ? 1 : 0) - (down ? 1 : 0);
+        int strafe = (right ? 1 : 0) - (left ? 1 : 0);
+        int vertical = (jump ? 1 : 0) - (sneak ? 1 : 0);
         if (forward == 0 && strafe == 0 && vertical == 0) return;
-        double yaw = Math.toRadians(camera.getYRot());
         Vec3 look = camera.getLookAngle();
-        double dx = look.x * forward + Math.cos(yaw) * strafe;
-        double dy = look.y * forward + vertical;
-        double dz = look.z * forward + Math.sin(yaw) * strafe;
-        double length = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (length == 0) return;
-        double movement = speed() * (sprint ? 0.2 : 0.1) / length;
-        camera.setPos(camera.getX() + dx * movement, camera.getY() + dy * movement,
-                camera.getZ() + dz * movement);
+        FreecamMovement.Vector movement = FreecamMovement.offset(camera.getYRot(),
+                new FreecamMovement.Vector(look.x, look.y, look.z), forward, strafe, vertical,
+                speed() * (sprint ? 0.2 : 0.1));
+        camera.setPos(camera.getX() + movement.x(), camera.getY() + movement.y(),
+                camera.getZ() + movement.z());
     }
 
     private void restoreInputs(Minecraft client) {

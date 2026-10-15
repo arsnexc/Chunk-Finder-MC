@@ -14,6 +14,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import dev.chunkfinder.core.ChunkRange;
 import dev.chunkfinder.core.Nearest;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -88,8 +89,7 @@ public final class ChunkFinderModule extends Module {
         int cx = client.player.blockPosition().getX() >> 4;
         int cz = client.player.blockPosition().getZ() >> 4;
         int radius = settings.simulationDistance();
-        boolean pruned = results.keySet().removeIf(c -> Math.abs((long) c.x() - cx) > radius
-                || Math.abs((long) c.z() - cz) > radius
+        boolean pruned = results.keySet().removeIf(c -> !ChunkRange.contains(c.x(), c.z(), cx, cz, radius)
                 || !level.hasChunkAt(new BlockPos(c.x() * 16, level.getMinY(), c.z() * 16)));
         if (pruned) publishDetections();
         int move = Math.max(1, radius / 2);
@@ -103,12 +103,20 @@ public final class ChunkFinderModule extends Module {
                 ChunkCoord chunk = queue.pollFirst();
                 if (chunk == null) break;
                 BlockPos probe = new BlockPos(chunk.x() * 16 + 8, level.getMinY(), chunk.z() * 16 + 8);
-                if (!level.hasChunkAt(probe)) { results.remove(chunk); publishDetections(); continue; }
-                activeScan = new ChunkScan(chunk, 256 * Math.max(0, level.getMaxY() - level.getMinY()));
+                if (!ChunkRange.contains(chunk.x(), chunk.z(), cx, cz, radius) || !level.hasChunkAt(probe)) {
+                    if (results.remove(chunk) != null) publishDetections();
+                    continue;
+                }
+                activeScan = new ChunkScan(chunk, ScanHeight.blocksPerChunk(level));
             }
             ChunkScan scan = activeScan;
-            if (!level.hasChunkAt(new BlockPos(scan.chunk.x() * 16, level.getMinY(), scan.chunk.z() * 16))) {
-                results.remove(scan.chunk); activeScan = null; publishDetections(); continue;
+            // A one-chunk move can leave old work outside the radius without crossing
+            // the queue-rebuild threshold. Check active work as well as cached results.
+            if (!ChunkRange.contains(scan.chunk.x(), scan.chunk.z(), cx, cz, radius)
+                    || !level.hasChunkAt(new BlockPos(scan.chunk.x() * 16, level.getMinY(), scan.chunk.z() * 16))) {
+                if (results.remove(scan.chunk) != null) publishDetections();
+                activeScan = null;
+                continue;
             }
             int amount = Math.min(budget, scan.total - scan.cursor);
             for (int i = 0; i < amount; i++) {
@@ -145,7 +153,7 @@ public final class ChunkFinderModule extends Module {
             if (level.hasChunkAt(probe)) queue.addLast(chunk);
             else results.remove(chunk);
         }
-        results.keySet().removeIf(c -> Math.abs(c.x() - cx) > radius || Math.abs(c.z() - cz) > radius);
+        results.keySet().removeIf(c -> !ChunkRange.contains(c.x(), c.z(), cx, cz, radius));
         publishDetections();
         queueX = cx; queueZ = cz; queueDistance = radius;
     }

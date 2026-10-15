@@ -41,6 +41,7 @@ public final class LoadedBlockScanner {
     private int centerX = Integer.MIN_VALUE, centerZ = Integer.MIN_VALUE, radius = -1;
     private int loaded;
     private List<Point> snapshot = List.of();
+    private boolean snapshotDirty;
 
     public LoadedBlockScanner(int budget) {
         if (budget < 1) throw new IllegalArgumentException("Scan budget must be positive");
@@ -52,6 +53,7 @@ public final class LoadedBlockScanner {
         active = null; worldIdentity = null; nextDiscovery = 0; loaded = 0;
         centerX = centerZ = Integer.MIN_VALUE; radius = -1;
         snapshot = List.of();
+        snapshotDirty = false;
     }
 
     public void tick(Object identity, World world, int playerX, int playerY, int playerZ, int requestedRadius) {
@@ -99,9 +101,10 @@ public final class LoadedBlockScanner {
                 results.put(scan.chunk, new Result(scan.found.values(), tick));
                 if (validationQueued.add(scan.chunk)) validation.addLast(scan.chunk);
                 active = null;
-                publish();
+                snapshotDirty = true;
             }
         }
+        publish();
         // Do not advance nextDiscovery here: doing so every idle tick starves chunk discovery forever.
     }
 
@@ -109,7 +112,7 @@ public final class LoadedBlockScanner {
         boolean removed = results.keySet().removeIf(c -> !inRadius(c, cx, cz, r) || !world.loaded(c.x, c.z));
         validation.removeIf(c -> !results.containsKey(c));
         validationQueued.retainAll(results.keySet());
-        if (removed) publish();
+        if (removed) snapshotDirty = true;
         if (active != null && (!inRadius(active.chunk, cx, cz, r) || !world.loaded(active.chunk.x, active.chunk.z))) active = null;
         List<Chunk> candidates = new ArrayList<>();
         loaded = 0;
@@ -139,20 +142,61 @@ public final class LoadedBlockScanner {
         List<Point> live = result.points.stream().filter(p -> world.matches(p.x, p.y, p.z)).toList();
         if (live.size() != result.points.size()) {
             results.put(chunk, new Result(live, result.scannedAt));
-            publish();
+            snapshotDirty = true;
         }
         validation.addLast(chunk); validationQueued.add(chunk);
     }
 
-    private void remove(Chunk chunk) { if (results.remove(chunk) != null) publish(); }
-    private void publish() { snapshot = results.values().stream().flatMap(r -> r.points.stream()).toList(); }
+    private void remove(Chunk chunk) { if (results.remove(chunk) != null) snapshotDirty = true; }
+    private void publish() {
+        if (!snapshotDirty) return;
+        // Many short/empty chunks can finish inside one budget. Flatten their cache
+        // only once at the end of the scan tick, not after each completion.
+        snapshot = results.values().stream().flatMap(r -> r.points.stream()).toList();
+        snapshotDirty = false;
+    }
     private static boolean inRadius(Chunk c, int x, int z, int r) {
-        return Math.abs((long) c.x - x) <= r && Math.abs((long) c.z - z) <= r;
+        return ChunkRange.contains(c.x, c.z, x, z, r);
     }
     private static double square(double n) { return n * n; }
     public List<Point> points() { return snapshot; }
     public List<Point> nearest(double x, double y, double z, int limit) {
         return Nearest.select(snapshot, limit, p -> p.distanceSquared(x, y, z));
+    }
+    /**
+     * Revalidate at most {@code limit} candidates, once per module tick, not per frame.
+     * Evict invalid candidates so they cannot monopolize the next tick's render slots.
+     * Do not refill by probing arbitrarily many blocks in this pass: the read cap is strict.
+     */
+    public List<Point> nearestMatching(World world, double x, double y, double z, int limit) {
+        List<Point> live = new ArrayList<>();
+        Map<Chunk, Set<Point>> invalid = new HashMap<>();
+        Set<Chunk> unloaded = new HashSet<>();
+        for (Point point : nearest(x, y, z, limit)) {
+            Chunk chunk = new Chunk(point.x >> 4, point.z >> 4);
+            if (!world.loaded(chunk.x, chunk.z)) unloaded.add(chunk);
+            else if (world.matches(point.x, point.y, point.z)) live.add(point);
+            else invalid.computeIfAbsent(chunk, ignored -> new HashSet<>()).add(point);
+        }
+        boolean changed = results.keySet().removeAll(unloaded);
+        if (!unloaded.isEmpty()) {
+            queue.removeIf(unloaded::contains);
+            validation.removeIf(unloaded::contains);
+            validationQueued.removeAll(unloaded);
+            if (active != null && unloaded.contains(active.chunk)) active = null;
+        }
+        for (Map.Entry<Chunk, Set<Point>> entry : invalid.entrySet()) {
+            Result cached = results.get(entry.getKey());
+            if (cached == null) continue;
+            List<Point> kept = cached.points.stream().filter(p -> !entry.getValue().contains(p)).toList();
+            if (kept.size() == cached.points.size()) continue;
+            // Preserve refresh age and the empty cached chunk: mining is not a request
+            // for an immediate full scan, nor a reason to postpone scheduled refresh.
+            results.put(entry.getKey(), new Result(kept, cached.scannedAt));
+            changed = true;
+        }
+        if (changed) { snapshotDirty = true; publish(); }
+        return List.copyOf(live);
     }
     public int maxBlockReadsPerTick() { return budget + MATCHES_PER_CHUNK; }
     public int loadedCount() { return loaded; }

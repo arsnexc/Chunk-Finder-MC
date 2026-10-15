@@ -97,7 +97,7 @@ public abstract class BlockEspModule extends Module {
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
         LoadedBlockScanner.World world = new LoadedBlockScanner.World() {
             @Override public int minY() { return level.getMinY(); }
-            @Override public int maxY() { return level.getMaxY(); }
+            @Override public int maxY() { return ScanHeight.maxYExclusive(level); }
             @Override public boolean loaded(int x, int z) { return level.hasChunkAt(cursor.set(x * 16, level.getMinY(), z * 16)); }
             @Override public boolean matches(int x, int y, int z) { return targetBlocks.contains(level.getBlockState(cursor.set(x, y, z)).getBlock()); }
             @Override public boolean emptySection(int x, int z, int y) {
@@ -109,8 +109,7 @@ public abstract class BlockEspModule extends Module {
         Vec3 camera = client.gameRenderer.getMainCamera().position();
         // Compute nearest candidates once per client tick, not by sorting all matches every rendered frame.
         // Revalidate these visible candidates immediately, within a fixed 48-position budget.
-        nearest = scanner.nearest(camera.x, camera.y, camera.z, MAX_RENDERED_BLOCKS).stream()
-                .filter(p -> world.loaded(p.x() >> 4, p.z() >> 4) && world.matches(p.x(), p.y(), p.z())).toList();
+        nearest = scanner.nearestMatching(world, camera.x, camera.y, camera.z, MAX_RENDERED_BLOCKS);
         scanStatus = scanner.loadedCount() == 0 ? "Waiting for loaded chunks"
                 : scanner.pendingCount() > 0 ? "Scanning · " + scannedChunkCount() + "/" + loadedChunkCount()
                 : detectedCount() == 0 ? "No matches · auto-refresh on" : detectedCount() + " matches · auto-refresh on";

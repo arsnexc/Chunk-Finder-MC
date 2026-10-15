@@ -3,6 +3,9 @@ package dev.chunkfinder;
 import com.google.gson.JsonParser;
 import dev.chunkfinder.settings.BlockEspConfig;
 import dev.chunkfinder.settings.OverlayConfig;
+import dev.chunkfinder.core.ChunkRange;
+import dev.chunkfinder.core.FreecamMovement;
+import dev.chunkfinder.core.FreecamMovement.Vector;
 import dev.chunkfinder.core.LoadedBlockScanner;
 import dev.chunkfinder.core.LoadedBlockScanner.Point;
 import dev.chunkfinder.core.Nearest;
@@ -29,7 +32,7 @@ public final class ModuleRegressionTest {
     private static final String DIAMOND = "minecraft:diamond_ore", GOLD = "minecraft:gold_ore";
 
     public static void main(String[] args) throws Exception {
-        ids(); selection(); nearest(); configuration(); scanner();
+        ids(); selection(); nearest(); configuration(); scanner(); freecamMovement(); visibleCandidates(); chunkRange(); snapshotPublication();
         System.out.println("Module regression tests passed (" + assertions + " assertions).");
         System.out.println("Uses fake loaded-world access; not an in-game rendering or anti-cheat test.");
     }
@@ -106,6 +109,45 @@ public final class ModuleRegressionTest {
         eq(23, bounded.values().getLast(), "farther trajectories excluded");
         bounded.offer(-1, Double.NaN); bounded.offer(-2, Double.POSITIVE_INFINITY);
         eq(24, bounded.values().size(), "non-finite distance ignored");
+    }
+
+    private static void freecamMovement() {
+        double[][] directions = {
+                {0, 0, 1, -1, 0},       // South: screen-right is West (-X).
+                {90, -1, 0, 0, -1},     // West: screen-right is North (-Z).
+                {180, 0, -1, 1, 0},     // North: screen-right is East (+X).
+                {-90, 1, 0, 0, 1},      // East: screen-right is South (+Z).
+        };
+        for (double[] direction : directions) {
+            Vector look = new Vector(direction[1], 0, direction[2]);
+            motion(direction[3] * 0.5, 0, direction[4] * 0.5,
+                    FreecamMovement.offset(direction[0], look, 0, 1, 0, 0.5), "D/right at yaw " + direction[0]);
+            motion(-direction[3] * 0.5, 0, -direction[4] * 0.5,
+                    FreecamMovement.offset(direction[0], look, 0, -1, 0, 0.5), "A/left at yaw " + direction[0]);
+            motion(look.x() * 0.5, 0, look.z() * 0.5,
+                    FreecamMovement.offset(direction[0], look, 1, 0, 0, 0.5), "forward follows native look");
+            motion(-look.x() * 0.5, 0, -look.z() * 0.5,
+                    FreecamMovement.offset(direction[0], look, -1, 0, 0, 0.5), "backward opposes native look");
+            motion(0, 0.5, 0, FreecamMovement.offset(direction[0], look, 0, 0, 1, 0.5), "Space is world-up");
+            motion(0, -0.5, 0, FreecamMovement.offset(direction[0], look, 0, 0, -1, 0.5), "Shift is world-down");
+            motion(0, 0, 0, FreecamMovement.offset(direction[0], look, 0, 0, 0, 0.5), "opposed/released keys cancel");
+        }
+        Vector south = new Vector(0, 0, 1);
+        double diagonal = 0.5 / Math.sqrt(2);
+        motion(-diagonal, 0, diagonal, FreecamMovement.offset(0, south, 1, 1, 0, 0.5), "diagonals keep configured speed");
+        motion(-diagonal * 2, 0, diagonal * 2, FreecamMovement.offset(0, south, 1, 1, 0, 1), "sprint doubles displacement, not diagonal boost");
+        motion(0, -0.3, 0.4, FreecamMovement.offset(0, new Vector(0, -0.6, 0.8), 1, 0, 0, 0.5), "forward retains native pitch");
+        motion(-0.5, 0, 0, FreecamMovement.offset(0, new Vector(0, -1, 0), 0, 1, 0, 0.5), "strafe remains horizontal at vertical pitch");
+        motion(0, 0, 0, FreecamMovement.offset(0, new Vector(0, -1, 1.0e-8), 1, 0, 1, 0.5), "near-canceling vertical inputs cannot normalize into full-speed drift");
+        motion(0, 0, 0, FreecamMovement.offset(Double.NaN, south, 0, 1, 0, 0.5), "invalid camera rotation is safe");
+        motion(0, 0, 0, FreecamMovement.offset(0, south, 1, 0, 0, Double.POSITIVE_INFINITY), "invalid distance is safe");
+        motion(0, 0, 0, FreecamMovement.offset(0, south, 1, 0, 0, -1), "negative distance cannot invert controls");
+    }
+
+    private static void motion(double x, double y, double z, Vector actual, String message) {
+        check(Double.isFinite(actual.x()) && Double.isFinite(actual.y()) && Double.isFinite(actual.z())
+                && Math.abs(x - actual.x()) < 1.0e-9 && Math.abs(y - actual.y()) < 1.0e-9 && Math.abs(z - actual.z()) < 1.0e-9,
+                message + ": expected " + new Vector(x, y, z) + ", got " + actual);
     }
 
     private static void configuration() throws Exception {
@@ -243,6 +285,97 @@ public final class ModuleRegressionTest {
         check(skip.points().isEmpty(), "zero-height world clears old results");
     }
 
+    private static void snapshotPublication() {
+        Object dimension = new Object();
+        FakeWorld world = new FakeWorld(1); world.load(0, 0); world.load(1, 0);
+        Point first = new Point(0, 0, 0), second = new Point(16, 0, 0);
+        world.blocks.put(first, DIAMOND); world.blocks.put(second, GOLD);
+        LoadedBlockScanner scan = new LoadedBlockScanner(1024);
+        List<Point> before = scan.points();
+        AtomicInteger earlyPublications = new AtomicInteger();
+        world.onRead = () -> { if (scan.points() != before) earlyPublications.incrementAndGet(); };
+        run(scan, dimension, world, 1, 0, 0, 0, 1);
+        eq(0, earlyPublications.get(), "scan completions are batched instead of copying/publishing the entire cache mid-tick");
+        check(new HashSet<>(scan.points()).equals(Set.of(first, second)), "all completed chunks are visible together at the end of the tick");
+        check(before.isEmpty(), "old scan snapshots remain immutable");
+        world.onRead = null;
+        List<Point> published = scan.points();
+        run(scan, dimension, world, 1, 0, 0, 0, 1);
+        check(scan.points() == published, "unchanged ticks do not copy the result cache");
+        scan.clear();
+        check(scan.points().isEmpty(), "explicit reset still clears the published snapshot immediately");
+    }
+
+    private static void chunkRange() {
+        check(ChunkRange.contains(-6, -6, 0, 0, 6), "square radius includes its negative corner");
+        check(ChunkRange.contains(6, 6, 0, 0, 6), "square radius includes its positive corner");
+        check(!ChunkRange.contains(-6, 0, 1, 0, 6), "one-chunk move invalidates old edge work before a larger queue rebuild");
+        check(!ChunkRange.contains(0, -6, 0, 1, 6), "z-axis move invalidates old edge work");
+        check(ChunkRange.contains(7, 6, 1, 0, 6), "moved positive edge remains in range");
+        check(ChunkRange.contains(-1, -1, -1, -1, 0), "zero radius includes exactly its own chunk");
+        check(!ChunkRange.contains(0, -1, -1, -1, 0), "zero radius excludes neighbors across zero");
+        check(!ChunkRange.contains(0, 0, 0, 0, -1), "invalid negative radius contains nothing");
+        check(!ChunkRange.contains(Integer.MIN_VALUE, 0, Integer.MAX_VALUE, 0, 12), "x coordinate subtraction cannot overflow into radius");
+        check(!ChunkRange.contains(0, Integer.MAX_VALUE, 0, Integer.MIN_VALUE, 12), "z coordinate subtraction cannot overflow into radius");
+
+        Object dimension = new Object();
+        FakeWorld world = new FakeWorld(16); world.load(-6, 0);
+        Point edge = new Point(-96, 0, 0); world.blocks.put(edge, DIAMOND);
+        LoadedBlockScanner scan = new LoadedBlockScanner(16);
+        run(scan, dimension, world, 1, 0, 0, 0, 6);
+        eq(1, scan.pendingCount(), "edge chunk has unfinished work");
+        int reads = world.reads;
+        run(scan, dimension, world, 1, 16, 0, 0, 6);
+        eq(0, world.reads - reads, "out-of-radius partial work performs no further block reads");
+        check(scan.points().isEmpty() && scan.pendingCount() == 0, "partial matches cannot reappear outside a moved radius");
+    }
+
+    private static void visibleCandidates() {
+        Object dimension = new Object();
+        FakeWorld world = new FakeWorld(1);
+        world.load(0, 0); world.load(1, 0);
+        Point minedA = new Point(0, 0, 0), minedB = new Point(1, 0, 0);
+        Point liveA = new Point(16, 0, 0), liveB = new Point(17, 0, 0);
+        for (Point point : List.of(minedA, minedB, liveA, liveB)) world.blocks.put(point, DIAMOND);
+        LoadedBlockScanner scan = new LoadedBlockScanner(64);
+        run(scan, dimension, world, 8, 0, 0, 0, 1);
+        eq(4, scan.points().size(), "visible-candidate fixture scanned both chunks");
+        List<Point> before = scan.points();
+        check(scan.nearestMatching(world, 0.5, 0.5, 0.5, 2).equals(List.of(minedA, minedB)), "native adapter candidate ordering");
+        check(scan.points() == before, "all-live validation does not republish an identical snapshot");
+        world.blocks.remove(minedA); world.blocks.remove(minedB);
+        int reads = world.reads;
+        check(scan.nearestMatching(world, 0.5, 0.5, 0.5, 2).isEmpty(), "mined candidates are never returned for rendering");
+        eq(2, world.reads - reads, "candidate validation cannot exceed its read budget");
+        check(!scan.points().contains(minedA) && !scan.points().contains(minedB), "mined nearest candidates must leave the cache, not occupy every render slot again");
+        check(before.contains(minedA) && before.contains(minedB), "pruning does not mutate previously published snapshots");
+        check(scan.nearestMatching(world, 0.5, 0.5, 0.5, 2).equals(List.of(liveA, liveB)), "the next bounded validation pass reaches surviving targets");
+        eq(2, scan.scannedCount(), "mining does not force immediate full-chunk rescans");
+
+        world.loaded.remove("1,0");
+        reads = world.reads;
+        check(scan.nearestMatching(world, 0.5, 0.5, 0.5, 1).isEmpty(), "unloaded candidate is not rendered");
+        eq(0, world.reads - reads, "candidate validation never reads an unloaded block");
+        check(scan.points().isEmpty(), "an unloaded chunk loses all cached candidates, not just the nearest one");
+        eq(1, scan.scannedCount(), "unloaded chunk is removed from result cache");
+        world.load(1, 0); world.blocks.remove(liveA); world.blocks.remove(liveB);
+        Point reloaded = new Point(18, 0, 0); world.blocks.put(reloaded, GOLD);
+        run(scan, dimension, world, 50, 0, 0, 0, 1);
+        check(scan.points().equals(List.of(reloaded)), "reloaded chunk is discovered again without resurrecting stale candidates");
+
+        FakeWorld dense = new FakeWorld(1); dense.load(0, 0); dense.allMatch = true;
+        LoadedBlockScanner capped = new LoadedBlockScanner(256);
+        run(capped, dimension, dense, 1, 8, 0, 8, 0);
+        eq(128, capped.points().size(), "dense candidate fixture reaches the per-chunk cap");
+        dense.allMatch = false;
+        for (int remaining : new int[]{80, 32, 0}) {
+            reads = dense.reads;
+            check(capped.nearestMatching(dense, 8.5, 0.5, 8.5, 48).isEmpty(), "mined dense candidates are filtered");
+            check(dense.reads - reads <= 48, "pruning cannot turn a render-cap query into an unbounded scan");
+            eq(remaining, capped.points().size(), "each bounded pass makes progress through invalid candidates");
+        }
+    }
+
     private static void run(LoadedBlockScanner scan, Object dimension, FakeWorld world, int ticks, int x, int y, int z, int radius) {
         for (int i = 0; i < ticks; i++) {
             int reads = world.reads;
@@ -256,6 +389,7 @@ public final class ModuleRegressionTest {
         final Map<Point, String> blocks = new HashMap<>();
         Set<String> targets = Set.of(DIAMOND, GOLD);
         boolean allMatch, skipAir;
+        Runnable onRead;
         int reads;
         FakeWorld(int height) { this.height = height; }
         void load(int x, int z) { loaded.add(x + "," + z); }
@@ -266,6 +400,7 @@ public final class ModuleRegressionTest {
             if (!loaded(x >> 4, z >> 4)) throw new AssertionError("Queried an unloaded chunk");
             if (y < minY() || y >= maxY()) throw new AssertionError("Queried outside world height");
             reads++;
+            if (onRead != null) onRead.run();
             String id = blocks.get(new Point(x, y, z));
             return allMatch || id != null && targets.contains(id);
         }

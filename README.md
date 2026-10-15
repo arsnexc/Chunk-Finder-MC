@@ -1,13 +1,13 @@
-# Chunk Finder 2.5.0
+# Chunk Finder 2.5.1
 
 [![Build mod](https://github.com/arsnexc/Chunk-Finder-MC/actions/workflows/build.yml/badge.svg)](https://github.com/arsnexc/Chunk-Finder-MC/actions/workflows/build.yml)
 
-Standalone Minecraft **1.21.11 Fabric** mod project. The Chunk Finder 2.5.0 source lives at this repository's root. Requires Java 21 to run Minecraft, Fabric Loader >=0.19.5 and Fabric API. Build with **JDK 25** for the Fabric Loom toolchain.
+Standalone Minecraft **1.21.11 Fabric** mod project. The Chunk Finder 2.5.1 source lives at this repository's root. Requires Java 21 to run Minecraft, Fabric Loader >=0.19.5 and Fabric API. Build with **JDK 25** for the Fabric Loom toolchain.
 
 ## Download the mod — no local build needed
 
 1. Open [GitHub Actions](https://github.com/arsnexc/Chunk-Finder-MC/actions/workflows/build.yml) and select the latest successful **Build mod** run for the branch containing this version. Until the UI changes are merged, use `arena/64b54617-chunk-finder-mc`, not the older `main` build.
-2. Under **Artifacts**, download **chunk-finder-2-2.5.0.jar** (GitHub sign-in is required). This is the installable JAR, not the sources JAR; no ZIP extraction is needed.
+2. Under **Artifacts**, download **chunk-finder-2-2.5.1.jar** (GitHub sign-in is required). This is the installable JAR, not the sources JAR; no ZIP extraction is needed.
 3. Put it in your Minecraft 1.21.11 Fabric instance's `mods/` folder alongside Fabric API, and remove older Chunk Finder versions.
 
 The workflow builds automatically on pushes and pull requests, can also be run manually from Actions, and retains the JAR artifact for 90 days. Build caches and generated JARs are not committed to the repository.
@@ -20,9 +20,19 @@ GitHub Actions runs the command below with **JDK 25**. To reproduce the build yo
 ./gradlew --no-daemon clean build
 ```
 
-On Windows use `gradlew.bat --no-daemon clean build`. Install **only** `build/libs/chunk-finder-2-2.5.0.jar` in the game's `mods/` folder; remove older Chunk Finder versions. Building needs access to Gradle, Fabric, Mojang and Maven repositories.
+On Windows use `gradlew.bat --no-daemon clean build`. Install **only** `build/libs/chunk-finder-2-2.5.1.jar` in the game's `mods/` folder; remove older Chunk Finder versions. Building needs access to Gradle, Fabric, Mojang and Maven repositories.
 
-## New in 2.5.0
+## Fixed in 2.5.1
+
+- Scanners now include the top build layer; Minecraft 1.21.11's `getMaxY()` is inclusive.
+- Freecam A/D strafes in the correct camera-relative direction, without full-speed drift from near-canceling vertical input.
+- Mined/unloaded ESP candidates leave the cache instead of repeatedly consuming the nearest-result slots; per-tick read limits remain unchanged.
+- Chunk Finder drops queued/partial scans outside the current radius, even before its larger movement threshold triggers a queue rebuild.
+- Shared block scan snapshots are batched at the end of each scan tick instead of copied after every completed chunk.
+
+See [2.5.1 fixes and verification limits](docs/MODULE_FIXES_2_5_1.md). Existing configs and multi-target selections are retained.
+
+## Multi-target features retained from 2.5.0
 
 - Multi-select **Targets** for Block, Storage, Spawner, Entity and Dropped Item ESP.
 - Search, selected-only view, bulk selection across filtered results, and explicit **Apply / Cancel**.
@@ -37,7 +47,7 @@ Remove older Chunk Finder JARs before installing. Existing config filenames and 
 
 **K** opens the dark category UI; **ESC** closes it. **G** toggles Freecam. Left-click a module/pill to toggle; right-click a module (or click its chevron) for inline settings. Drag sliders and scroll each panel independently. On narrow screens, use the bottom scrollbar or scroll outside panels to reach other columns. **Tab / Shift-Tab** navigates controls; **Enter / Space** activates them, and arrow keys adjust sliders or expand/collapse modules.
 
-Each module retains its existing local settings. All modules start off on a clean install, except settings retained from earlier versions. Expand an ESP and choose **Targets**, toggle several entries, then **Apply**. **Cancel / Esc** discards the draft; **Clear all + Apply** intentionally matches nothing. The normal build runs both UI and module regression tests. GitHub Actions additionally runs [native Minecraft UI smoke tests](docs/CLIENT_UI_TESTS.md) and checks the installable JAR and bundled font; these do **not** validate world scanning, multiplayer or gameplay performance. See [multi-target update notes](docs/MULTI_TARGET_UPDATE.md) for controls and remaining checks; [UI history](docs/UI_UPDATE.md) documents the earlier visual/font update.
+Each module retains its existing local settings. All modules start off on a clean install, except settings retained from earlier versions. Expand an ESP and choose **Targets**, toggle several entries, then **Apply**. **Cancel / Esc** discards the draft; **Clear all + Apply** intentionally matches nothing. The normal build runs both UI and module regression tests. GitHub Actions additionally runs [native Minecraft UI and API-contract checks](docs/CLIENT_UI_TESTS.md) and checks the installable JAR and bundled font; these do **not** validate world scanning, multiplayer or gameplay performance. See [multi-target update notes](docs/MULTI_TARGET_UPDATE.md) for controls and remaining checks; [UI history](docs/UI_UPDATE.md) documents the earlier visual/font update.
 
 | Module | What it does |
 | --- | --- |

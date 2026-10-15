@@ -61,7 +61,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y xvfb xauth libgl1-mesa-dri flite1-dev adwaita-icon-theme
 
-      - name: Minecraft client UI smoke tests
+      - name: Minecraft client UI and module contract tests
         id: client_smoke
         timeout-minutes: 10
         env:
@@ -131,13 +131,16 @@ jobs:
           smoke = re.search(r'Minecraft UI smoke tests passed \((\d+) assertions\)\.', smoke_log)
           assert smoke is not None, 'Native Minecraft UI smoke test did not report success'
           print(f'::notice title=Minecraft UI smoke tests::{smoke.group(0)}')
+          contracts = re.search(r'Minecraft module contract tests passed \((\d+) assertions\)\.', smoke_log)
+          assert contracts is not None, 'Native Minecraft module API contracts did not report success'
+          print(f'::notice title=Minecraft module contract tests::{contracts.group(0)}')
 
-          jar = Path('build/libs/chunk-finder-2-2.5.0.jar')
+          jar = Path('build/libs/chunk-finder-2-2.5.1.jar')
           with zipfile.ZipFile(jar) as archive:
               assert archive.testzip() is None, 'Corrupt JAR entry'
               metadata = json.loads(archive.read('fabric.mod.json'))
               assert metadata['id'] == 'chunkfinder'
-              assert metadata['version'] == '2.5.0'
+              assert metadata['version'] == '2.5.1'
               assert metadata['depends']['minecraft'] == '~1.21.11'
               assert metadata['license'] == 'MIT'
               for entry in (
@@ -148,6 +151,9 @@ jobs:
                   'dev/chunkfinder/TargetPickerScreen.class',
                   'dev/chunkfinder/TargetCatalog.class',
                   'dev/chunkfinder/BlockEspModule.class',
+                  'dev/chunkfinder/ScanHeight.class',
+                  'dev/chunkfinder/core/FreecamMovement.class',
+                  'dev/chunkfinder/core/ChunkRange.class',
                   'dev/chunkfinder/core/LoadedBlockScanner.class',
                   'dev/chunkfinder/core/TargetSelection.class',
                   'dev/chunkfinder/settings/BlockEspConfig.class',
@@ -182,8 +188,9 @@ jobs:
                                  for entry in archive.namelist()), f'Test fixture leaked into mod: {test_class}'
               assert not any(entry.startswith('dev/chunkfinder/ModuleRegressionTest')
                              for entry in archive.namelist()), 'Module test fixture leaked into mod'
-              assert not any(entry.startswith('dev/chunkfinder/ClientScreenSmokeTest')
-                             for entry in archive.namelist()), 'Native client test fixture leaked into mod'
+              for test_class in ('ClientScreenSmokeTest', 'ClientModuleContractTest'):
+                  assert not any(entry.startswith(f'dev/chunkfinder/{test_class}')
+                                 for entry in archive.namelist()), f'Native client test fixture leaked into mod: {test_class}'
               assert 'fabric-client-gametest' not in metadata['entrypoints'], 'Test entrypoint leaked into mod'
               for entry in archive.namelist():
                   if entry.endswith('.class'):
@@ -196,14 +203,15 @@ jobs:
           print(f'::notice title=Installable mod::{jar.name} | SHA-256: {digest}')
           print(f'::notice title=UI font lookup::{ttf["file"]} resolves to {font_resource}')
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-              summary.write('## Chunk Finder 2.5.0\n\n')
+              summary.write('## Chunk Finder 2.5.1\n\n')
               summary.write('Built for Fabric / Minecraft **1.21.11** with **JDK 25**.\n\n')
               summary.write('Command: `./gradlew --no-daemon clean build`\n\n')
               summary.write(f'UI regression tests: **{regression.group(1)} assertions passed**.\n\n')
               summary.write(f'Module regression tests: **{modules.group(1)} assertions passed**.\n\n')
               summary.write(f'Native Minecraft UI smoke tests: **{smoke.group(1)} assertions passed**.\n\n')
+              summary.write(f'Native Minecraft module API contracts: **{contracts.group(1)} assertions passed** (synthetic blocks, no world).\n\n')
               summary.write(f'Installable JAR: `{jar.name}`\n\nSHA-256: `{digest}`\n\n')
-              summary.write('Archive contents, font loading, native UI interactions and Java 21 bytecode checked. '
+              summary.write('Archive contents, font loading, native UI/height API contracts and Java 21 bytecode checked. '
                             'No world/server, multiplayer, world-scanning performance or anti-cheat test was performed.\n')
           PY
 
@@ -211,7 +219,7 @@ jobs:
         id: artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          path: build/libs/chunk-finder-2-2.5.0.jar
+          path: build/libs/chunk-finder-2-2.5.1.jar
           archive: false
           if-no-files-found: error
           retention-days: 90
@@ -220,4 +228,4 @@ jobs:
         env:
           ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
         run: |
-          printf '\n[Download chunk-finder-2-2.5.0.jar](%s) (GitHub sign-in required)\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+          printf '\n[Download chunk-finder-2-2.5.1.jar](%s) (GitHub sign-in required)\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"

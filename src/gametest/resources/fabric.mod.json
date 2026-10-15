@@ -6,7 +6,10 @@
   "environment": "client",
   "license": "MIT",
   "entrypoints": {
-    "fabric-client-gametest": ["dev.chunkfinder.ClientScreenSmokeTest"]
+    "fabric-client-gametest": [
+      "dev.chunkfinder.ClientScreenSmokeTest",
+      "dev.chunkfinder.ClientModuleContractTest"
+    ]
   },
   "depends": {
     "chunkfinder": "*",
