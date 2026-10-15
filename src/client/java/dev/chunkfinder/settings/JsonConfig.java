@@ -63,6 +63,8 @@ public final class JsonConfig {
         }
         return TargetIds.copy(defaults);
     }
+    public JsonElement element(String key) { return json.has(key) ? json.get(key).deepCopy() : com.google.gson.JsonNull.INSTANCE; }
+    public void putElement(String key, JsonElement value) { json.add(key, value.deepCopy()); }
     public void put(String key, boolean value) { json.addProperty(key, value); }
     public void put(String key, int value) { json.addProperty(key, value); }
     public void putTargets(String key, Collection<String> value) { json.add(key, GSON.toJsonTree(TargetIds.copy(value))); }

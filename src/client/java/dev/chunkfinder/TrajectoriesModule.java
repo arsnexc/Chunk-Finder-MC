@@ -7,9 +7,7 @@ import dev.chunkfinder.core.TrajectoryPredictor;
 import dev.chunkfinder.core.TrajectoryPredictor.Point;
 import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.projectile.Projectile;
@@ -37,6 +35,7 @@ public final class TrajectoriesModule extends Module {
         if (value == isEnabled()) return;
         super.setEnabled(value); settings.setEnabled(value); invalidate();
     }
+    public int visibleCount() { return visibleCount; }
     public int steps() { return settings.range(); }
     public void setSteps(int value) {
         int before = settings.range(); settings.setRange(value);
@@ -100,15 +99,4 @@ public final class TrajectoriesModule extends Module {
                 .setColor(color).setNormal(pose, 0.0F, 1.0F, 0.0F).setLineWidth(1.8F);
     }
 
-    public void renderHud(Minecraft client, GuiGraphics graphics) {
-        if (!isEnabled() || !FeatureAccess.allowed(client) || client.level != lastLevel
-                || client.options.hideGui || client.screen != null) return;
-        int x = 12, y = graphics.guiHeight() - 49;
-        graphics.fill(x, y, x + 208, y + 37, 0xDA101722);
-        graphics.fill(x, y, x + 3, y + 37, 0xFF80D5FF);
-        graphics.drawString(client.font, Component.literal("TRAJECTORIES"), x + 11, y + 7, 0xFFCBECFF, true);
-        String status = visibleCount + " paths · approximate";
-        String fitted = client.font.substrByWidth(Component.literal(status), 186).getString();
-        graphics.drawString(client.font, Component.literal(fitted), x + 11, y + 21, 0xFFAABBCD, false);
-    }
 }

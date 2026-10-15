@@ -46,20 +46,8 @@ public final class ChunkFinderClient implements ClientModInitializer {
             modules.trajectories().tick(client);
             modules.freecam().tick(client);
         });
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "chunk_finder_overlay"),
-                (graphics, deltaTracker) -> modules.chunkFinder().renderHud(Minecraft.getInstance(), graphics));
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "block_esp_overlays"),
-                (graphics, deltaTracker) -> modules.renderBlockHud(Minecraft.getInstance(), graphics));
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "entity_esp_overlay"),
-                (graphics, deltaTracker) -> modules.entityEsp().renderHud(Minecraft.getInstance(), graphics));
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "dropped_item_esp_overlay"),
-                (graphics, deltaTracker) -> modules.droppedItemEsp().renderHud(Minecraft.getInstance(), graphics));
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "trajectories_overlay"),
-                (graphics, deltaTracker) -> modules.trajectories().renderHud(Minecraft.getInstance(), graphics));
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "target_renderer_overlay"),
-                (graphics, deltaTracker) -> modules.targetRenderer().renderHud(Minecraft.getInstance(), graphics));
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "freecam_overlay"),
-                (graphics, deltaTracker) -> modules.freecam().renderHud(Minecraft.getInstance(), graphics));
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "compact_hud"),
+                (graphics, deltaTracker) -> modules.renderHud(Minecraft.getInstance(), graphics));
         WorldRenderEvents.BEFORE_DEBUG_RENDER.register(modules.chunkFinder()::renderWorld);
         WorldRenderEvents.BEFORE_DEBUG_RENDER.register(modules.ancientDebrisFinder()::renderWorld);
         WorldRenderEvents.BEFORE_DEBUG_RENDER.register(modules.itemEsp()::renderWorld);

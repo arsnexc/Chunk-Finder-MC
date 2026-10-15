@@ -78,8 +78,11 @@ final class FilterSettingsRegressionTest {
             Files.writeString(freecam, "{\"range\":8,\"option\":true,\"unrelated\":12}");
             FreecamConfig config = new FreecamConfig(freecam);
             check(config.speed() == 8 && !config.swapStrafe(), "legacy generic option must not silently reverse A/D");
+            check(config.fullTerrain(), "full loaded-terrain visibility defaults on");
+            config.fullTerrain(false);
             config.swapStrafe(true);
             FreecamConfig saved = new FreecamConfig(freecam);
+            check(!saved.fullTerrain(), "terrain visibility preference survives reload");
             check(saved.swapStrafe() && saved.speed() == 8, "strafe preference persists independently of speed");
             check(JsonParser.parseString(Files.readString(freecam)).getAsJsonObject().get("unrelated").getAsInt() == 12, "freecam retains unrelated keys");
             saved.speed(99); check(saved.speed() == 10, "freecam speed bounds retained");

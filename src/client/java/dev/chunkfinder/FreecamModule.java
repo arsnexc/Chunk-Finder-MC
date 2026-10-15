@@ -4,9 +4,7 @@ import dev.chunkfinder.core.FreecamMovement;
 import dev.chunkfinder.settings.FreecamConfig;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
@@ -17,6 +15,7 @@ public final class FreecamModule extends Module {
     private static FreecamModule active;
     private final FreecamConfig settings = new FreecamConfig(FabricLoader.getInstance().getConfigDir().resolve("chunkfinder-freecam.json"));
     private final FreecamControls controls = new FreecamControls();
+    private final FreecamTerrainVisibility terrain = new FreecamTerrainVisibility();
     private Entity camera;
     private LocalPlayer owner;
     private Entity previousCamera;
@@ -30,6 +29,15 @@ public final class FreecamModule extends Module {
         else stop(Minecraft.getInstance());
     }
 
+    public String hudDetails() {
+        return camera == null ? "Player-loaded chunks only" : camera.getBlockX() + ", " + camera.getBlockY() + ", " + camera.getBlockZ() + " · loaded data only";
+    }
+    public boolean fullTerrain() { return settings.fullTerrain(); }
+    public void setFullTerrain(boolean value) {
+        settings.fullTerrain(value);
+        Minecraft client = Minecraft.getInstance();
+        if (isEnabled() && valid(client) && value) terrain.begin(client); else terrain.end(client);
+    }
     public int speed() { return settings.speed(); }
     public void setSpeed(int value) { settings.speed(value); }
     public boolean swapStrafe() { return settings.swapStrafe(); }
@@ -52,6 +60,7 @@ public final class FreecamModule extends Module {
         camera.setOldPosAndRot();
         client.setCameraEntity(camera);
         controls.beginView(client.options);
+        if (fullTerrain()) terrain.begin(client);
         active = this;
         super.setEnabled(true);
         return true;
@@ -73,6 +82,7 @@ public final class FreecamModule extends Module {
         if (!valid(client)) { stop(client); return; }
         // F5 front-view otherwise mirrors the rendered basis relative to the marker.
         controls.enforceView(client.options);
+        terrain.enforce(client);
         // Mask the actual remappable bindings while the player ticks, then restore them.
         captured = controls.captureAndMask(client.options);
     }
@@ -82,6 +92,7 @@ public final class FreecamModule extends Module {
         if (!valid(client)) { stop(client); return; }
         // Vanilla handles F5 during its tick; normalize again before movement/rendering.
         controls.enforceView(client.options);
+        terrain.enforce(client);
         camera.setOldPosAndRot();
         if (captured != null && client.screen == null) moveCamera();
         restoreInputs(client);
@@ -96,7 +107,8 @@ public final class FreecamModule extends Module {
 
     private void moveCamera() {
         FreecamMovement.Vector movement = controls.movement(camera.getYRot(), camera.getXRot(), captured, speed(), swapStrafe());
-        camera.setPos(camera.getX() + movement.x(), camera.getY() + movement.y(), camera.getZ() + movement.z());
+        if (movement.x() != 0 || movement.y() != 0 || movement.z() != 0)
+            camera.setPos(camera.getX() + movement.x(), camera.getY() + movement.y(), camera.getZ() + movement.z());
     }
 
     private void restoreInputs(Minecraft client) {
@@ -107,6 +119,7 @@ public final class FreecamModule extends Module {
 
     private void stop(Minecraft client) {
         restoreInputs(client);
+        terrain.end(client);
         // Restore our perspective only when we still own the camera, or vanilla
         // has returned it to the player (e.g. respawn). Do not override another mod.
         boolean ownView = client != null && (client.getCameraEntity() == camera || client.getCameraEntity() == client.player);
@@ -125,11 +138,4 @@ public final class FreecamModule extends Module {
         super.setEnabled(false);
     }
 
-    public void renderHud(Minecraft client, GuiGraphics graphics) {
-        if (!isEnabled() || client.options.hideGui || client.screen != null || camera == null) return;
-        String label = "FREECAM  ·  " + speed() + "x  ·  "
-                + camera.getBlockX() + ", " + camera.getBlockY() + ", " + camera.getBlockZ();
-        graphics.drawCenteredString(client.font, Component.literal(label), graphics.guiWidth() / 2,
-                12, 0xFF8CE0BD);
-    }
 }

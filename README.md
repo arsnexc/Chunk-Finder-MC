@@ -1,13 +1,13 @@
-# Chunk Finder 2.5.3
+# Chunk Finder 2.6.0
 
 [![Build mod](https://github.com/arsnexc/Chunk-Finder-MC/actions/workflows/build.yml/badge.svg)](https://github.com/arsnexc/Chunk-Finder-MC/actions/workflows/build.yml)
 
-Standalone Minecraft **1.21.11 Fabric** mod project. The Chunk Finder 2.5.3 source lives at this repository's root. Requires Java 21 to run Minecraft, Fabric Loader >=0.19.5 and Fabric API. Build with **JDK 25** for the Fabric Loom toolchain.
+Standalone Minecraft **1.21.11 Fabric** mod project. The Chunk Finder 2.6.0 source lives at this repository's root. Requires Java 21 to run Minecraft, Fabric Loader >=0.19.5 and Fabric API. Build with **JDK 25** for the Fabric Loom toolchain.
 
 ## Download the mod — no local build needed
 
 1. Open [GitHub Actions](https://github.com/arsnexc/Chunk-Finder-MC/actions/workflows/build.yml) and select the latest successful **Build mod** run for the branch containing this version. Until the UI changes are merged, use `arena/64b54617-chunk-finder-mc`, not the older `main` build.
-2. Under **Artifacts**, download **chunk-finder-2-2.5.3.jar** (GitHub sign-in is required). This is the installable JAR, not the sources JAR; no ZIP extraction is needed.
+2. Under **Artifacts**, download **chunk-finder-2-2.6.0.jar** (GitHub sign-in is required). This is the installable JAR, not the sources JAR; no ZIP extraction is needed.
 3. Put it in your Minecraft 1.21.11 Fabric instance's `mods/` folder alongside Fabric API, and remove older Chunk Finder versions.
 
 The workflow builds automatically on pushes and pull requests, can also be run manually from Actions, and retains the JAR artifact for 90 days. Build caches and generated JARs are not committed to the repository.
@@ -20,9 +20,20 @@ GitHub Actions runs the command below with **JDK 25**. To reproduce the build yo
 ./gradlew --no-daemon clean build
 ```
 
-On Windows use `gradlew.bat --no-daemon clean build`. Install **only** `build/libs/chunk-finder-2-2.5.3.jar` in the game's `mods/` folder; remove older Chunk Finder versions. Building needs access to Gradle, Fabric, Mojang and Maven repositories.
+On Windows use `gradlew.bat --no-daemon clean build`. Install **only** `build/libs/chunk-finder-2-2.6.0.jar` in the game's `mods/` folder; remove older Chunk Finder versions. Building needs access to Gradle, Fabric, Mojang and Maven repositories.
 
-## Fixed in 2.5.3
+## New in 2.6.0
+
+- **Full terrain** Freecam mode disables native section occlusion for already-loaded terrain and restores it on exit. It cannot fetch missing server chunks or undo anti-xray data.
+- One **compact text HUD**, backgrounds off by default, replaces the oversized cards. Configure it through **K → UI / HUD**.
+- Click category headers to **minimize panels**; state is saved. Added keyboard header controls, narration, fitted menu zoom, high contrast, reduced motion and subtle hover/toggle animation.
+- **ESP colors** supports module colors and per-block/entity/item overrides, RGB/hex editing and Apply/Cancel without changing target selections.
+- **Buried targets** clearly exposes the Block/Storage/Spawner ESP mode. Enable it to include non-exposed client-reported blocks.
+- **Base Finder** now defaults to compact, strict evidence clusters; ordinary generated loot/work/light blocks alone no longer qualify. Natural geodes are a separate opt-in feature.
+
+Read [2.6.0 controls, migration and verification limits](docs/PRESENTATION_2_6_0.md). Existing configs/selections are retained; new UI and color files are added.
+
+## Fixes retained from 2.5.3
 
 - Freecam uses Minecraft's native camera/input conventions, prevents F5 front-view mismatches, restores the previous view and handles toggle-sneak/sprint correctly.
 - **K → Movement → Freecam → Swap A/D** provides a saved lateral-direction override.
@@ -63,13 +74,13 @@ Remove older Chunk Finder JARs before installing. Existing config filenames and 
 
 ## Controls and modules
 
-**K** opens the dark category UI; **ESC** closes it. **G** toggles Freecam. Freecam uses first-person while active; its settings include **Swap A/D**. Left-click a module/pill to toggle; right-click a module (or click its chevron) for inline settings. Drag sliders and scroll each panel independently. On narrow screens, use the bottom scrollbar or scroll outside panels to reach other columns. **Tab / Shift-Tab** navigates controls; **Enter / Space** activates them, and arrow keys adjust sliders or expand/collapse modules.
+**K** opens the dark module UI; **Esc** closes it. **G** toggles Freecam. Freecam uses first-person while active, with **Swap A/D** and **Full terrain** controls. Left-click a module/pill to toggle; right-click a module or click its chevron for settings. Click a category header to minimize/restore it. Drag sliders and scroll panels independently. Narrow windows use the bottom horizontal scrollbar. **Tab / Shift-Tab** navigates headers and controls; **Enter / Space** activates them; arrows adjust sliders or expand/collapse. **UI / HUD** opens presentation and accessibility preferences.
 
 Each module retains its existing local settings. All modules start off on a clean install, except settings retained from earlier versions. Expand an ESP and choose **Targets**, toggle several entries, then **Apply**. **Cancel / Esc** discards the draft; **Clear all + Apply** intentionally matches nothing. The normal build runs both UI and module regression tests. GitHub Actions additionally runs [native Minecraft UI and API-contract checks](docs/CLIENT_UI_TESTS.md) and checks the installable JAR and bundled font; these do **not** validate world scanning, multiplayer or gameplay performance. See [multi-target update notes](docs/MULTI_TARGET_UPDATE.md) for controls and remaining checks; [UI history](docs/UI_UPDATE.md) documents the earlier visual/font update.
 
 | Module | What it does |
 | --- | --- |
-| Chunk Finder | Geode and possible activity-block clues in loaded chunks; 4,096-block/tick scan budget. |
+| Base Finder | Strict spatial base-like clues with optional natural geodes; 4,096-block/tick budget. Heuristic, not ownership proof. |
 | Ancient Debris Finder | Exposed, client-reported Nether debris by default; suppresses buried replacements but cannot verify server-hidden ore. |
 | Block ESP | Choose multiple registered blocks by searchable name/ID and outline matching loaded blocks. |
 | Storage ESP | Select container types: chests, barrels, shulkers, hoppers, dispensers/droppers, furnaces, brewing stands, crafters and decorated pots. |

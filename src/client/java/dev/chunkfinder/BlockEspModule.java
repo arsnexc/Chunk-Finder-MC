@@ -3,18 +3,17 @@ package dev.chunkfinder;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.chunkfinder.settings.BlockEspConfig;
+import dev.chunkfinder.settings.PaletteConfig;
 import dev.chunkfinder.core.LoadedBlockScanner;
 import dev.chunkfinder.core.LoadedBlockScanner.Point;
 import dev.chunkfinder.core.TargetSelection.Entry;
 import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.ShapeRenderer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.Shapes;
@@ -30,7 +29,8 @@ public abstract class BlockEspModule extends Module {
     private static final int MAX_RENDERED_BLOCKS = 48;
     private final BlockEspConfig settings;
     private final Predicate<Block> allowed;
-    private final int color;
+    private final PaletteConfig colors;
+    private java.util.Map<Point, String> nearestIds = java.util.Map.of();
     private final LoadedBlockScanner scanner;
     private Set<Block> targetBlocks = Set.of();
     private List<Point> nearest = List.of();
@@ -41,7 +41,8 @@ public abstract class BlockEspModule extends Module {
     }
     protected BlockEspModule(String name, String file, Collection<String> defaults, Predicate<Block> allowed, int color, int budget, boolean defaultExposedOnly) {
         super(name, ModuleCategory.VISUALS, false);
-        this.allowed = allowed; this.color = color;
+        this.allowed = allowed;
+        colors = new PaletteConfig(FabricLoader.getInstance().getConfigDir().resolve("chunkfinder-colors-" + file), color);
         settings = new BlockEspConfig(FabricLoader.getInstance().getConfigDir().resolve(file), defaults, defaultExposedOnly);
         scanner = new LoadedBlockScanner(budget);
         resolveTargets();
@@ -52,6 +53,12 @@ public abstract class BlockEspModule extends Module {
         if (isEnabled() == enabled) return;
         super.setEnabled(enabled); settings.enabled(enabled);
         clear(enabled ? "Scan queued" : "Module is off");
+    }
+    public PaletteConfig colors() { return colors; }
+    public String hudDetails() {
+        if (nearest.isEmpty()) return scanStatus;
+        Point p = nearest.getFirst();
+        return p.x() + ", " + p.y() + ", " + p.z() + (exposedOnly() ? " · exposed" : " · client data");
     }
     public boolean tracesEnabled() { return settings.traces(); }
     public boolean blockHighlightEnabled() { return settings.outlines(); }
@@ -94,7 +101,7 @@ public abstract class BlockEspModule extends Module {
                 && settings.targets().contains(BuiltInRegistries.BLOCK.getKey(block).toString())) resolved.add(block);
         targetBlocks = Set.copyOf(resolved);
     }
-    private void clear(String status) { scanner.clear(); nearest = List.of(); scanStatus = status; }
+    private void clear(String status) { scanner.clear(); nearest = List.of(); nearestIds = java.util.Map.of(); scanStatus = status; }
 
     public void tick(Minecraft client) {
         if (!isEnabled()) return;
@@ -113,6 +120,10 @@ public abstract class BlockEspModule extends Module {
         // Compute nearest candidates once per client tick, not by sorting all matches every rendered frame.
         // Revalidate these visible candidates immediately, within a fixed 48-position budget.
         nearest = scanner.nearestMatching(world, camera.x, camera.y, camera.z, MAX_RENDERED_BLOCKS);
+        // Cache target identities once per tick, never query block data while painting.
+        java.util.Map<Point, String> ids = new java.util.HashMap<>();
+        for (Point p : nearest) ids.put(p, BuiltInRegistries.BLOCK.getKey(level.getBlockState(new BlockPos(p.x(), p.y(), p.z())).getBlock()).toString());
+        nearestIds = java.util.Map.copyOf(ids);
         scanStatus = scanner.loadedCount() == 0 ? "Waiting for loaded chunks"
                 : scanner.pendingCount() > 0 ? (exposedOnly() ? "Exposed scan · " : "Scanning · ") + scannedChunkCount() + "/" + loadedChunkCount()
                 : exposedOnly() ? detectedCount() + " exposed · unverified"
@@ -130,6 +141,7 @@ public abstract class BlockEspModule extends Module {
         VertexConsumer lines = context.consumers().getBuffer(
                 net.minecraft.client.renderer.rendertype.ChunkFinderThroughWallLines.renderType());
         for (Point point : nearest) {
+            int color = colors.color(nearestIds.get(point));
             if (blockHighlightEnabled()) ShapeRenderer.renderShape(matrices, lines,
                     Shapes.box(-0.035, -0.035, -0.035, 1.035, 1.035, 1.035),
                     point.x() - camera.x, point.y() - camera.y, point.z() - camera.z, color, 1.6F);
@@ -142,25 +154,4 @@ public abstract class BlockEspModule extends Module {
         }
     }
 
-    /** Called in a shared right-side stack so enabling multiple ESPs does not overlap their cards. */
-    public void renderHudAt(Minecraft client, GuiGraphics graphics, int x, int y, int width, int height) {
-        if (!isEnabled() || !FeatureAccess.allowed(client) || client.options.hideGui) return;
-        graphics.fill(x, y, x + width, y + height, 0xDA171717);
-        graphics.fill(x, y, x + 2, y + height, color);
-        String count = Integer.toString(detectedCount());
-        drawFit(client, graphics, name(), x + 9, y + 6, width - 42, 0xFFE5E5E5);
-        graphics.drawString(client.font, Component.literal(count), x + width - client.font.width(count) - 9, y + 6, color, false);
-        drawFit(client, graphics, scanStatus, x + 9, y + 20, width - 18, 0xFFAAAAAA);
-        int rows = Math.min(3, Math.max(0, (height - 30) / 13));
-        for (int i = 0; i < Math.min(rows, nearest.size()); i++) {
-            Point p = nearest.get(i);
-            int distance = (int) Math.sqrt(p.distanceSquared(client.player.getX(), client.player.getY(), client.player.getZ()));
-            drawFit(client, graphics, p.x() + ", " + p.y() + ", " + p.z() + " · " + distance + "m",
-                    x + 9, y + 33 + i * 13, width - 18, 0xFFD0D0D0);
-        }
-    }
-    private static void drawFit(Minecraft client, GuiGraphics g, String text, int x, int y, int width, int color) {
-        if (client.font.width(text) > width) text = client.font.substrByWidth(Component.literal(text), Math.max(0, width - 6)).getString() + "…";
-        g.drawString(client.font, Component.literal(text), x, y, color, false);
-    }
 }

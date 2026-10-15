@@ -3,18 +3,18 @@ package dev.chunkfinder;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.chunkfinder.core.Nearest;
+import dev.chunkfinder.settings.PaletteConfig;
+import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.world.entity.MobCategory;
 import dev.chunkfinder.core.TargetSelection.Entry;
 import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.ShapeRenderer;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
@@ -33,6 +33,7 @@ public final class EntityEspModule extends Module {
     private static final int MAX_OUTLINES = 32;
     private final Mode mode;
     private final OverlaySettings settings;
+    private final PaletteConfig colors;
     private Set<EntityType<?>> entityTypes = Set.of();
     private Set<Item> items = Set.of();
     private List<Entity> nearest = List.of();
@@ -42,6 +43,7 @@ public final class EntityEspModule extends Module {
     public EntityEspModule(Mode mode) {
         super(mode == Mode.ENTITIES ? "Entity ESP" : "Dropped Item ESP", ModuleCategory.VISUALS, false);
         this.mode = mode;
+        colors = new PaletteConfig(FabricLoader.getInstance().getConfigDir().resolve(mode == Mode.ENTITIES ? "chunkfinder-colors-entities.json" : "chunkfinder-colors-items.json"), mode == Mode.ENTITIES ? 0xFF89E6B6 : 0xFFFFD27B);
         settings = new OverlaySettings(mode == Mode.ENTITIES ? "chunkfinder-entities.json" : "chunkfinder-dropped-items.json",
                 48, 16, 128, mode == Mode.ENTITIES ? "entityIds" : "itemIds",
                 mode == Mode.ENTITIES ? TargetCatalog.entityDefaults() : TargetCatalog.itemDefaults());
@@ -49,6 +51,16 @@ public final class EntityEspModule extends Module {
         super.setEnabled(settings.enabled());
     }
 
+    public PaletteConfig colors() { return colors; }
+    public int detectedCount() { return nearbyCount; }
+    public int automaticColor(String id) {
+        if (mode == Mode.DROPPED_ITEMS) return 0xFFFFD27B;
+        if ("minecraft:player".equals(id)) return 0xFF82B6FF;
+        for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE)
+            if (BuiltInRegistries.ENTITY_TYPE.getKey(type).toString().equals(id))
+                return type.getCategory() == MobCategory.MONSTER ? 0xFFFF808D : 0xFF89E6B6;
+        return 0xFF89E6B6;
+    }
     public Mode mode() { return mode; }
     public int range() { return settings.range(); }
     public void setRange(int value) { settings.setRange(value); invalidate(); }
@@ -118,33 +130,12 @@ public final class EntityEspModule extends Module {
         }
     }
     private int color(Entity entity) {
-        if (mode == Mode.DROPPED_ITEMS) return 0xFFFFD27B;
-        if (entity instanceof Player) return 0xFF82B6FF;
-        return entity instanceof Monster ? 0xFFFF808D : 0xFF89E6B6;
+        if (mode == Mode.DROPPED_ITEMS && entity instanceof ItemEntity item)
+            return colors.color(BuiltInRegistries.ITEM.getKey(item.getItem().getItem()).toString(), 0xFFFFD27B);
+        String id = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString();
+        int fallback = entity instanceof Player ? 0xFF82B6FF
+                : entity.getType().getCategory() == MobCategory.MONSTER ? 0xFFFF808D : 0xFF89E6B6;
+        return colors.color(id, fallback);
     }
 
-    public void renderHud(Minecraft client, GuiGraphics g) {
-        if (!isEnabled() || !FeatureAccess.allowed(client) || client.level != lastLevel || client.options.hideGui || client.screen != null) return;
-        int x = 12;
-        int y = mode == Mode.ENTITIES ? 157 : Math.max(12, g.guiHeight() - 123);
-        int count = Math.min(2, nearest.size()), height = 31 + count * 14;
-        if (y + height > g.guiHeight() - 4) y = Math.max(4, g.guiHeight() - height - 4);
-        g.fill(x, y, x + 214, y + height, 0xDA171717);
-        g.fill(x, y, x + 2, y + height, mode == Mode.ENTITIES ? 0xFF82B6FF : 0xFFFFD27B);
-        String title = mode == Mode.ENTITIES ? "ENTITY ESP" : "DROPPED ITEM ESP";
-        g.drawString(client.font, Component.literal(title), x + 9, y + 7, 0xFFE5E5E5, true);
-        String total = Integer.toString(nearbyCount);
-        g.drawString(client.font, Component.literal(total), x + 204 - client.font.width(total), y + 7, 0xFFAAAAAA, false);
-        if (settings.targets().isEmpty()) g.drawString(client.font, Component.literal("No targets selected"), x + 9, y + 20, 0xFFAAAAAA, false);
-        for (int i = 0; i < count; i++) {
-            Entity entity = nearest.get(i);
-            String label;
-            if (entity instanceof ItemEntity item) {
-                label = item.getItem().getHoverName().getString();
-                if (option()) label += " ×" + item.getItem().getCount();
-            } else label = entity.getName().getString();
-            if (client.font.width(label) > 188) label = client.font.substrByWidth(Component.literal(label), 182).getString() + "…";
-            g.drawString(client.font, Component.literal(label), x + 9, y + 23 + i * 14, 0xFFD0D0D0, false);
-        }
-    }
 }

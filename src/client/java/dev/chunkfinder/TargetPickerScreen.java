@@ -26,6 +26,8 @@ public class TargetPickerScreen extends Screen {
     private final String heading;
     private final TargetSelection selection;
     private final Consumer<Set<String>> apply;
+    private final Consumer<String> chooseColor;
+    private final String colorScope;
     private EditBox search;
     private int page, keyboardIndex = -1;
     private Focus focus = Focus.SEARCH;
@@ -33,9 +35,20 @@ public class TargetPickerScreen extends Screen {
 
     public TargetPickerScreen(Screen parent, String title, Collection<Entry> choices,
                               Collection<String> initial, Consumer<Set<String>> apply) {
+        this(parent, title, choices, initial, apply, null, "");
+    }
+    static TargetPickerScreen colorChoice(Screen parent, Collection<Entry> choices, Collection<String> known,
+                                           String scope, Consumer<String> choice) {
+        return new TargetPickerScreen(parent, "Choose color target", choices, known, null, choice, scope);
+    }
+    private TargetPickerScreen(Screen parent, String title, Collection<Entry> choices, Collection<String> initial,
+                               Consumer<Set<String>> apply, Consumer<String> chooseColor, String scope) {
         super(Component.literal(title));
-        this.parent = parent; this.heading = title; this.apply = apply;
+        this.parent = parent; this.heading = title; this.apply = apply; this.chooseColor = chooseColor; colorScope = scope;
         selection = new TargetSelection(choices, initial);
+    }
+    private List<Focus> focusOrder() {
+        return chooseColor == null ? List.of(Focus.values()) : List.of(Focus.SEARCH, Focus.LIST, Focus.PREVIOUS, Focus.NEXT, Focus.CANCEL, Focus.APPLY);
     }
 
     @Override protected void init() {
@@ -83,27 +96,30 @@ public class TargetPickerScreen extends Screen {
         if (selection.count() == 0) status += " · matches nothing";
         else if (selection.unavailableCount() > 0) status += " · " + selection.unavailableCount() + " unavailable";
         if (selection.changed()) status += " · unsaved";
-        text(canvas, status, panel.x() + 12, panel.y() + 27, panel.width() - 24, MUTED);
+        text(canvas, chooseColor == null ? status : "Colors only · ESP target selection is unchanged", panel.x() + 12, panel.y() + 27, panel.width() - 24, MUTED);
         if (ui.back().contains(mouseX, mouseY)) rounded(canvas, ui.back(), 3, ROW_HOVER);
         centered(canvas, "×", ui.back(), MUTED);
         outlined(canvas, ui.search(), 4, focus == Focus.SEARCH ? FOCUS : BORDER, ROW);
         if (!search.getValue().isEmpty()) centered(canvas, "×", ui.clearSearch(), MUTED);
+        if (chooseColor == null) {
         button(canvas, ui.selectedOnly(), "Selected", Focus.SELECTED, true, selection.selectedOnly(), mouseX, mouseY);
         button(canvas, ui.selectResults(), "All results", Focus.SELECT_RESULTS, !entries.isEmpty(), false, mouseX, mouseY);
         button(canvas, ui.clearResults(), "Clear results", Focus.CLEAR_RESULTS, !entries.isEmpty(), false, mouseX, mouseY);
         button(canvas, ui.clearAll(), "Clear all", Focus.CLEAR_ALL, selection.count() > 0, false, mouseX, mouseY);
+        } else text(canvas, "Choose a row, or use Module default below", ui.selectedOnly().x(), ui.selectedOnly().y() + 7, panel.width() - 24, MUTED);
         canvas.pushClip(ui.list());
         int start = page * ui.pageSize();
         for (int row = 0; row < ui.pageSize() && start + row < entries.size(); row++) {
             Entry entry = entries.get(start + row); Rect bounds = ui.row(row);
-            boolean selected = selection.selected(entry.id());
+            boolean selected = chooseColor == null ? selection.selected(entry.id()) : entry.id().equals(colorScope);
             boolean hovered = bounds.contains(mouseX, mouseY) && ui.list().contains(mouseX, mouseY);
             boolean focused = focus == Focus.LIST && keyboardIndex == start + row;
             outlined(canvas, bounds, 4, focused ? FOCUS : selected ? ACTIVE_BORDER : BORDER,
                     hovered ? ROW_HOVER : selected ? ACTIVE : ROW);
             text(canvas, entry.name(), bounds.x() + 8, bounds.y() + 3, bounds.width() - 38, entry.available() ? TEXT : MUTED);
             text(canvas, entry.id(), bounds.x() + 8, bounds.y() + 15, bounds.width() - 38, MUTED);
-            toggle(canvas, new Rect(bounds.right() - 24, bounds.y() + 9, 16, 8), selected);
+            if (chooseColor == null) toggle(canvas, new Rect(bounds.right() - 24, bounds.y() + 9, 16, 8), selected);
+            else chevron(canvas, bounds.right() - 16, bounds.y() + 11, false, MUTED);
         }
         if (entries.isEmpty()) centered(canvas, selection.selectedOnly() ? "No selected targets match" : "No matching targets", ui.list(), MUTED);
         canvas.popClip();
@@ -111,8 +127,8 @@ public class TargetPickerScreen extends Screen {
         button(canvas, ui.next(), "Next", Focus.NEXT, page + 1 < ui.pageCount(entries.size()), false, mouseX, mouseY);
         centered(canvas, (page + 1) + " / " + ui.pageCount(entries.size()),
                 new Rect(ui.previous().right(), ui.previous().y(), ui.next().x() - ui.previous().right(), ui.previous().height()), MUTED);
-        button(canvas, ui.cancel(), "Cancel", Focus.CANCEL, true, false, mouseX, mouseY);
-        button(canvas, ui.apply(), "Apply (" + selection.count() + ")", Focus.APPLY, true, true, mouseX, mouseY);
+        button(canvas, ui.cancel(), chooseColor == null ? "Cancel" : "Back", Focus.CANCEL, true, false, mouseX, mouseY);
+        button(canvas, ui.apply(), chooseColor == null ? "Apply (" + selection.count() + ")" : "Module default", Focus.APPLY, true, true, mouseX, mouseY);
         super.render(graphics, mouseX, mouseY, delta);
     }
 
@@ -124,7 +140,7 @@ public class TargetPickerScreen extends Screen {
         if (ui.search().contains(x, y)) {
             search.mouseClicked(event, doubleClick); focus(Focus.SEARCH); setDragging(true); return true;
         }
-        for (Focus value : Focus.values()) {
+        for (Focus value : focusOrder()) {
             Rect button = bounds(ui, value);
             if (button != null && button.contains(x, y)) { focus(value); activate(value); return true; }
         }
@@ -148,7 +164,8 @@ public class TargetPickerScreen extends Screen {
         int key = event.key();
         if (key == 258) { // Tab / Shift-Tab: all custom buttons and list are keyboard reachable.
             int direction = (event.modifiers() & 1) != 0 ? -1 : 1;
-            focus(Focus.values()[Math.floorMod(focus.ordinal() + direction, Focus.values().length)]);
+            List<Focus> order = focusOrder();
+            focus(order.get(Math.floorMod(order.indexOf(focus) + direction, order.size())));
             return true;
         }
         if ((key == 257 || key == 335) && (event.modifiers() & 2) != 0) { activate(Focus.APPLY); return true; }
@@ -168,6 +185,7 @@ public class TargetPickerScreen extends Screen {
     private void toggleRow() {
         List<Entry> entries = selection.filtered();
         if (keyboardIndex < 0 || keyboardIndex >= entries.size()) return;
+        if (chooseColor != null) { chooseColor.accept(entries.get(keyboardIndex).id()); return; }
         selection.toggle(entries.get(keyboardIndex).id());
         int count = selection.filtered().size();
         keyboardIndex = count == 0 ? -1 : Math.min(keyboardIndex, count - 1);
@@ -187,7 +205,7 @@ public class TargetPickerScreen extends Screen {
             case PREVIOUS -> page(-1);
             case NEXT -> page(1);
             case CANCEL -> onClose();
-            case APPLY -> { selection.apply(apply); Minecraft.getInstance().setScreen(parent); }
+            case APPLY -> { if (chooseColor != null) chooseColor.accept(""); else { selection.apply(apply); Minecraft.getInstance().setScreen(parent); } }
             default -> { }
         }
     }

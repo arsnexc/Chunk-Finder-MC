@@ -22,6 +22,7 @@ public final class UiRegressionTest {
         narrowWindows();
         pickerLayout();
         rendering();
+        assertions += UiEnhancementTest.run();
         System.out.println("UI regression tests passed (" + assertions + " assertions).");
         System.out.println("These are headless layout/input/rendering checks, not a Minecraft/Fabric or in-game test.");
     }
@@ -191,6 +192,7 @@ public final class UiRegressionTest {
         Fixture fixture = UiTestFixtures.large();
         ClickGui gui = fixture.gui();
         check(!gui.keyPressed(32, false), "Space without focus does nothing");
+        gui.keyPressed(258, false); // Category header is now keyboard accessible.
         gui.keyPressed(258, false);
         gui.keyPressed(32, false);
         check(fixture.values().getFirst().enabled, "keyboard toggles focused module");

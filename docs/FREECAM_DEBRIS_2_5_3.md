@@ -1,5 +1,7 @@
 # 2.5.3 — Freecam controls and server-reported debris
 
+> Retained in 2.6.0. See [the presentation/terrain update](PRESENTATION_2_6_0.md) for current HUD, colors, panel controls and Base Finder behavior.
+
 ## Freecam A/D and perspective
 
 The camera now obtains forward/left axes from Minecraft's native `Camera`

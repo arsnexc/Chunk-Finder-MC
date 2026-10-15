@@ -14,7 +14,7 @@ The newly built 2.5.0 JAR was byte-for-byte identical to the prior 2.5.0 artifac
 that 2.5.0 follow-up added tests and CI support, not gameplay changes. The later
 [2.5.1 patch](MODULE_FIXES_2_5_1.md) contains runtime fixes and the additional
 height API-contract entrypoint. The [2.5.2 patch](TRAJECTORY_FIXES_2_5_2.md) adds
-trajectory traversal/collision contracts; [2.5.3](FREECAM_DEBRIS_2_5_3.md) adds native camera/input and exposure-filter checks. Consult the intended build for current results.
+trajectory traversal/collision contracts; [2.5.3](FREECAM_DEBRIS_2_5_3.md) adds native camera/input and exposure-filter checks. The [2.6.0 presentation update](PRESENTATION_2_6_0.md) adds native panel/zoom/color-editor checks, culling restoration and strict base classification. Consult the intended build for current results.
 
 ## UI coverage
 
@@ -50,6 +50,11 @@ bindings, toggle-state masking and perspective restoration. `ClientExposureContr
 uses native air/fluid/debris states with synthetic loaded chunks to test buried
 replacement suppression and read budgets. Neither test creates a player/world
 or establishes that server-reported exposed debris is genuine.
+
+`ClientPresentationContractChecks` tests native culling-state restoration and
+vanilla block classification. `ClientPresentationUiChecks` exercises scaled panel
+minimization, narration, preferences navigation and transactional palette editing.
+Its compact-HUD screenshot uses labelled synthetic rows, not a running world.
 
 The test run directory is **`build/run/clientGameTest`**. Only that isolated
 run's configs are changed. The client tests do not open/create a world or run a

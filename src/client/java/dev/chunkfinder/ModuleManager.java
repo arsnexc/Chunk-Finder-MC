@@ -3,8 +3,14 @@ package dev.chunkfinder;
 import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import dev.chunkfinder.settings.InterfaceConfig;
+import dev.chunkfinder.ui.CompactHud;
+import net.fabricmc.loader.api.FabricLoader;
+import java.util.ArrayList;
 
 public final class ModuleManager {
+    private final InterfaceConfig interfaceSettings = new InterfaceConfig(FabricLoader.getInstance().getConfigDir().resolve("chunkfinder-ui.json"));
+    public InterfaceConfig interfaceSettings() { return interfaceSettings; }
     private final ChunkFinderModule chunkFinder = new ChunkFinderModule();
     private final AncientDebrisFinderModule ancientDebrisFinder = new AncientDebrisFinderModule();
     private final ItemEspModule itemEsp = new ItemEspModule();
@@ -18,18 +24,27 @@ public final class ModuleManager {
     private final List<Module> modules = List.of(chunkFinder, ancientDebrisFinder, itemEsp,
             storageEsp, spawnerEsp, entityEsp, droppedItemEsp, trajectories, targetRenderer, freecam);
 
-    public void renderBlockHud(Minecraft client, GuiGraphics graphics) {
-        if (!FeatureAccess.allowed(client) || client.options.hideGui || client.screen != null) return;
-        List<BlockEspModule> active = List.<BlockEspModule>of(ancientDebrisFinder, itemEsp, storageEsp, spawnerEsp)
-                .stream().filter(Module::isEnabled).toList();
-        if (active.isEmpty()) return;
-        int width = Math.min(230, Math.max(120, graphics.guiWidth() / 2 - 18));
-        int cardHeight = Math.min(76, Math.max(30, (graphics.guiHeight() - 24 - (active.size() - 1) * 6) / active.size()));
-        int x = graphics.guiWidth() - width - 12, y = 12;
-        for (BlockEspModule module : active) {
-            module.renderHudAt(client, graphics, x, y, width, cardHeight);
-            y += cardHeight + 6;
-        }
+    public void renderHud(Minecraft client, GuiGraphics graphics) {
+        if (!interfaceSettings.hud() || !FeatureAccess.allowed(client) || client.options.hideGui || client.screen != null) return;
+        List<CompactHud.Row> rows = new ArrayList<>();
+        if (freecam.isEnabled()) rows.add(new CompactHud.Row("Freecam", freecam.speed() + "x", freecam.hudDetails(), 0xFF8CE0BD));
+        if (chunkFinder.isEnabled()) rows.add(new CompactHud.Row(chunkFinder.strictBaseClues() ? "Base clues" : "Activity hints",
+                Long.toString(chunkFinder.baseCount()), chunkFinder.hudDetails(), chunkFinder.colors().color("chunkfinder:base_clue", 0xFFFFCE8D)));
+        if (chunkFinder.isEnabled() && chunkFinder.showGeodes()) rows.add(new CompactHud.Row("Geodes", Long.toString(chunkFinder.geodeCount()), "Natural budding-amethyst clusters", chunkFinder.colors().color("chunkfinder:geode", 0xFFB493FF)));
+        for (BlockEspModule module : List.<BlockEspModule>of(ancientDebrisFinder, itemEsp, storageEsp, spawnerEsp))
+            if (module.isEnabled()) rows.add(new CompactHud.Row(module == ancientDebrisFinder ? "Debris (unverified)" : module.name(),
+                    Integer.toString(module.detectedCount()), module.hudDetails(), module.colors().color(null)));
+        for (EntityEspModule module : List.of(entityEsp, droppedItemEsp))
+            if (module.isEnabled()) rows.add(new CompactHud.Row(module.name(), Integer.toString(module.detectedCount()), module.targetSummary(), module.colors().color(null)));
+        if (trajectories.isEnabled()) rows.add(new CompactHud.Row("Paths", Integer.toString(trajectories.visibleCount()), "Approximate client-tick preview", 0xFF80D5FF));
+        if (targetRenderer.isEnabled()) rows.add(new CompactHud.Row("Target", targetRenderer.hudLabel(client), "Current crosshair target", 0xFFFAABDF));
+        double scale = interfaceSettings.hudScale() / 100.0;
+        graphics.pose().pushMatrix();
+        try {
+            graphics.pose().scale((float) scale, (float) scale);
+            CompactHud.draw(new MinecraftUiCanvas(graphics, client.font), (int) (graphics.guiWidth() / scale), (int) (graphics.guiHeight() / scale),
+                    rows, interfaceSettings.lines(), interfaceSettings.details(), interfaceSettings.backgrounds());
+        } finally { graphics.pose().popMatrix(); }
     }
 
     public List<Module> modules() { return modules; }

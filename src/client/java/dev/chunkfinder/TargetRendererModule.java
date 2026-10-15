@@ -4,9 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.ShapeRenderer;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
@@ -67,18 +65,10 @@ public final class TargetRendererModule extends Module {
         }
     }
 
-    public void renderHud(Minecraft client, GuiGraphics graphics) {
-        if (!isEnabled() || client.options.hideGui || client.screen != null || bounds(client) == null) return;
-        String label = client.hitResult instanceof EntityHitResult hit
-                ? hit.getEntity().getName().getString() : client.level.getBlockState(
-                ((BlockHitResult) client.hitResult).getBlockPos()).getBlock().getName().getString();
-        String text = "TARGET  ·  " + label;
-        if (client.font.width(text) > 205) text = client.font.substrByWidth(Component.literal(text), 205).getString();
-        int x = (graphics.guiWidth() - Math.max(100, client.font.width(text) + 26)) / 2;
-        int width = Math.max(100, client.font.width(text) + 26);
-        int y = graphics.guiHeight() / 2 + 15;
-        graphics.fill(x, y, x + width, y + 23, 0xDC111823);
-        graphics.fill(x, y, x + 3, y + 23, 0xFFFAABDF);
-        graphics.drawCenteredString(client.font, Component.literal(text), x + width / 2, y + 8, 0xFFEBF0F8);
+    public String hudLabel(Minecraft client) {
+        if (bounds(client) == null) return "No target";
+        return client.hitResult instanceof EntityHitResult hit ? hit.getEntity().getName().getString()
+                : client.level.getBlockState(((BlockHitResult) client.hitResult).getBlockPos()).getBlock().getName().getString();
     }
+
 }

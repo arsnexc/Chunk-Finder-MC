@@ -121,6 +121,7 @@ public final class ClientScreenSmokeTest implements FabricClientGameTest {
         context.waitTicks(2);
         fontCheck(context);
         screenshot(context, "modules-native-after-reload");
+        assertions += ClientPresentationUiChecks.run(context, screenshots::add);
         context.setScreen(() -> new TitleScreen());
         writeReport();
         System.out.println("Minecraft UI smoke tests passed (" + assertions + " assertions).");
@@ -190,7 +191,7 @@ public final class ClientScreenSmokeTest implements FabricClientGameTest {
         Path report = FabricLoader.getInstance().getGameDir().resolve("client-smoke-report.txt");
         try {
             Files.writeString(report, "Minecraft UI smoke tests passed (" + assertions + " assertions).\n"
-                    + "Native font, picker input, Apply/Cancel, persistence, resize, resource reload.\n"
+                    + "Native font, picker/color input, minimized panels, zoom, Apply/Cancel, persistence, resize, resource reload; synthetic HUD preview.\n"
                     + "No world/server or anti-cheat test.\n" + String.join("\n", screenshots) + "\n");
         } catch (IOException exception) { throw new UncheckedIOException(exception); }
     }

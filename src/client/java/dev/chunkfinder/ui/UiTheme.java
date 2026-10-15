@@ -58,12 +58,13 @@ public final class UiTheme {
                 radius + 1, 0x30000000);
     }
 
-    public static void toggle(UiCanvas canvas, Rect bounds, boolean enabled) {
-        rounded(canvas, bounds, bounds.height() / 2, enabled ? 0xFF666666 : 0xFF343434);
+    public static void toggle(UiCanvas canvas, Rect bounds, boolean enabled) { toggle(canvas, bounds, enabled ? 1 : 0); }
+    public static void toggle(UiCanvas canvas, Rect bounds, double progress) {
+        double t = Math.max(0, Math.min(1, progress));
+        rounded(canvas, bounds, bounds.height() / 2, UiMotion.mix(0xFF343434, 0xFF666666, t));
         int diameter = bounds.height() - 2;
-        int x = enabled ? bounds.right() - diameter - 1 : bounds.x() + 1;
-        rounded(canvas, new Rect(x, bounds.y() + 1, diameter, diameter), diameter / 2,
-                enabled ? 0xFFF1F1F1 : 0xFF858585);
+        int x = bounds.x() + 1 + (int) Math.round((bounds.width() - diameter - 2) * t);
+        rounded(canvas, new Rect(x, bounds.y() + 1, diameter, diameter), diameter / 2, UiMotion.mix(0xFF858585, 0xFFF1F1F1, t));
     }
 
     public static void chevron(UiCanvas canvas, int x, int y, boolean expanded, int color) {

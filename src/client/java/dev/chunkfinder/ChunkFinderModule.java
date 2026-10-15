@@ -4,17 +4,19 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.ShapeRenderer;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import dev.chunkfinder.core.ChunkRange;
+import dev.chunkfinder.core.BaseClues;
+import dev.chunkfinder.settings.PaletteConfig;
+import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.world.level.block.ShulkerBoxBlock;
 import dev.chunkfinder.core.Nearest;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -25,9 +27,13 @@ import java.util.Map;
 
 public final class ChunkFinderModule extends Module {
     private final ChunkFinderSettings settings = ChunkFinderSettings.load();
+    private final PaletteConfig colors = new PaletteConfig(FabricLoader.getInstance().getConfigDir().resolve("chunkfinder-colors-base-finder.json"), 0xFFFFCE8D);
+    public PaletteConfig colors() { return colors; }
+    public int automaticColor(String id) { return "chunkfinder:geode".equals(id) ? 0xFFB493FF : 0xFFFFCE8D; }
     private final ArrayDeque<ChunkCoord> queue = new ArrayDeque<>();
     private final Map<ChunkCoord, List<Detection>> results = new HashMap<>();
-    private volatile List<Detection> renderDetections = List.of();
+    private List<Detection> renderDetections = List.of(), nearestDetections = List.of();
+    private int baseCount, geodeCount;
     private ClientLevel lastLevel;
     private ChunkScan activeScan;
     private long tickCount;
@@ -36,7 +42,7 @@ public final class ChunkFinderModule extends Module {
     private int queueX = Integer.MIN_VALUE, queueZ = Integer.MIN_VALUE, queueDistance = -1;
 
     public ChunkFinderModule() {
-        super("Chunk Finder", ModuleCategory.VISUALS, false);
+        super("Base Finder", ModuleCategory.VISUALS, false);
         super.setEnabled(settings.enabled());
     }
     @Override public void setEnabled(boolean enabled) {
@@ -54,6 +60,17 @@ public final class ChunkFinderModule extends Module {
         queue.clear(); activeScan = null; results.clear(); nextRefreshTick = 0;
         queueX = queueZ = Integer.MIN_VALUE; queueDistance = -1;
         publishDetections();
+    }
+    public boolean strictBaseClues() { return settings.strict(); }
+    public void setStrictBaseClues(boolean value) { if (value != settings.strict()) { settings.strict(value); requestRescan(); } }
+    public boolean showGeodes() { return settings.geodes(); }
+    public void setShowGeodes(boolean value) { if (value != settings.geodes()) { settings.geodes(value); requestRescan(); } }
+    public long baseCount() { return baseCount; }
+    public long geodeCount() { return geodeCount; }
+    public String hudDetails() {
+        return nearestDetections.stream().filter(d -> d.kind() == Kind.ACTIVITY).findFirst()
+                .map(d -> (int) Math.floor(d.x()) + ", " + (int) Math.floor(d.y()) + ", " + (int) Math.floor(d.z()) + " · heuristic")
+                .orElse("Scanning loaded chunks · heuristic");
     }
     public int sensitivity() { return settings.sensitivity(); }
     public int simulationDistance() { return settings.simulationDistance(); }
@@ -139,6 +156,8 @@ public final class ChunkFinderModule extends Module {
         }
         if (queue.isEmpty() && activeScan == null && nextRefreshTick <= tickCount)
             nextRefreshTick = tickCount + 40;
+        Vec3 camera = client.gameRenderer.getMainCamera().position();
+        nearestDetections = Nearest.select(renderDetections, 64, d -> new Vec3(d.x(), d.y(), d.z()).distanceToSqr(camera));
     }
 
     private void rebuild(ClientLevel level, int cx, int cz, int radius) {
@@ -162,39 +181,32 @@ public final class ChunkFinderModule extends Module {
         private final ChunkCoord chunk;
         private final int total;
         private int cursor;
-        private int budding, activity, activityBlocks;
-        private long gx, gy, gz, ax, ay, az;
+        private int budding;
+        private long gx, gy, gz;
+        private final BaseClues clues = new BaseClues();
         private int gxMin = Integer.MAX_VALUE, gyMin = Integer.MAX_VALUE, gzMin = Integer.MAX_VALUE;
         private int gxMax = Integer.MIN_VALUE, gyMax = Integer.MIN_VALUE, gzMax = Integer.MIN_VALUE;
-        private int axMin = Integer.MAX_VALUE, ayMin = Integer.MAX_VALUE, azMin = Integer.MAX_VALUE;
-        private int axMax = Integer.MIN_VALUE, ayMax = Integer.MIN_VALUE, azMax = Integer.MIN_VALUE;
 
         private ChunkScan(ChunkCoord chunk, int total) { this.chunk = chunk; this.total = total; }
 
         private void observe(BlockState state, int x, int y, int z) {
-            if (state.is(Blocks.BUDDING_AMETHYST)) {
+            if (settings.geodes() && state.is(Blocks.BUDDING_AMETHYST)) {
                 budding++; gx += x; gy += y; gz += z;
                 gxMin = Math.min(gxMin, x); gyMin = Math.min(gyMin, y); gzMin = Math.min(gzMin, z);
                 gxMax = Math.max(gxMax, x); gyMax = Math.max(gyMax, y); gzMax = Math.max(gzMax, z);
             }
-            int weight = weight(state, y);
-            if (weight > 0) {
-                activity += weight; activityBlocks++; ax += x; ay += y; az += z;
-                axMin = Math.min(axMin, x); ayMin = Math.min(ayMin, y); azMin = Math.min(azMin, z);
-                axMax = Math.max(axMax, x); ayMax = Math.max(ayMax, y); azMax = Math.max(azMax, z);
-            }
+            observeBase(clues, state, x, y, z);
         }
 
         private List<Detection> detections() {
             List<Detection> found = new ArrayList<>(2);
-            if (budding >= Math.max(1, 10 - settings.sensitivity()))
+            if (settings.geodes() && budding >= Math.max(1, 10 - settings.sensitivity()))
                 found.add(new Detection(Kind.GEODE, (double) gx / budding, (double) gy / budding,
                         (double) gz / budding, budding,
                         new AABB(gxMin, gyMin, gzMin, gxMax + 1, gyMax + 1, gzMax + 1)));
-            if (activityBlocks > 0 && activity >= Math.max(4, 24 - settings.sensitivity() * 2))
-                found.add(new Detection(Kind.ACTIVITY, (double) ax / activityBlocks,
-                        (double) ay / activityBlocks, (double) az / activityBlocks, activity,
-                        new AABB(axMin, ayMin, azMin, axMax + 1, ayMax + 1, azMax + 1)));
+            for (BaseClues.Cluster cluster : clues.results(settings.sensitivity(), settings.strict()))
+                found.add(new Detection(Kind.ACTIVITY, cluster.x(), cluster.y(), cluster.z(), cluster.score(),
+                        new AABB(cluster.minX(), cluster.minY(), cluster.minZ(), cluster.maxX() + 1, cluster.maxY() + 1, cluster.maxZ() + 1)));
             return found;
         }
     }
@@ -203,49 +215,29 @@ public final class ChunkFinderModule extends Module {
         List<Detection> snapshot = new ArrayList<>();
         for (List<Detection> chunk : results.values()) snapshot.addAll(chunk);
         renderDetections = List.copyOf(snapshot);
+        baseCount = (int) snapshot.stream().filter(d -> d.kind() == Kind.ACTIVITY).count();
+        geodeCount = snapshot.size() - baseCount;
+        nearestDetections = List.of();
     }
 
-    private static int weight(BlockState s, int y) {
-        if (s.is(Blocks.CHEST) || s.is(Blocks.TRAPPED_CHEST) || s.is(Blocks.BARREL) || s.is(Blocks.ENDER_CHEST)) return 4;
-        if (s.is(Blocks.FURNACE) || s.is(Blocks.BLAST_FURNACE) || s.is(Blocks.SMOKER)
-                || s.is(Blocks.CRAFTING_TABLE) || s.is(Blocks.ANVIL)
-                || s.is(Blocks.CHIPPED_ANVIL) || s.is(Blocks.DAMAGED_ANVIL)) return 3;
-        if (y <= 80 && (s.is(Blocks.TORCH) || s.is(Blocks.WALL_TORCH) || s.is(Blocks.SOUL_TORCH)
+    static void observeBase(BaseClues clues, BlockState s, int x, int y, int z) {
+        if (s.is(Blocks.BEACON) || s.is(Blocks.RESPAWN_ANCHOR) || s.is(Blocks.CONDUIT)
+                || s.is(Blocks.ENCHANTING_TABLE) || s.getBlock() instanceof ShulkerBoxBlock) {
+            clues.observe(x, y, z, BaseClues.Family.SPECIAL, 14, true);
+        } else if (s.is(Blocks.CHEST) || s.is(Blocks.TRAPPED_CHEST) || s.is(Blocks.BARREL) || s.is(Blocks.ENDER_CHEST)) {
+            clues.observe(x, y, z, BaseClues.Family.STORAGE, 4, false);
+        } else if (s.is(Blocks.FURNACE) || s.is(Blocks.BLAST_FURNACE) || s.is(Blocks.SMOKER)
+                || s.is(Blocks.CRAFTING_TABLE) || s.is(Blocks.ANVIL) || s.is(Blocks.CHIPPED_ANVIL)
+                || s.is(Blocks.DAMAGED_ANVIL) || s.is(Blocks.BOOKSHELF) || s.is(Blocks.CHISELED_BOOKSHELF)) {
+            clues.observe(x, y, z, BaseClues.Family.WORK, 3, false);
+        } else if (s.is(Blocks.TORCH) || s.is(Blocks.WALL_TORCH) || s.is(Blocks.SOUL_TORCH)
                 || s.is(Blocks.SOUL_WALL_TORCH) || s.is(Blocks.REDSTONE_TORCH) || s.is(Blocks.REDSTONE_WALL_TORCH)
-                || s.is(Blocks.LANTERN) || s.is(Blocks.SOUL_LANTERN))) return 2;
-        if (y <= 80 && (s.is(Blocks.RAIL) || s.is(Blocks.POWERED_RAIL) || s.is(Blocks.DETECTOR_RAIL)
+                || s.is(Blocks.LANTERN) || s.is(Blocks.SOUL_LANTERN)) {
+            clues.observe(x, y, z, BaseClues.Family.LIGHT, 2, false);
+        } else if (s.is(Blocks.RAIL) || s.is(Blocks.POWERED_RAIL) || s.is(Blocks.DETECTOR_RAIL)
                 || s.is(Blocks.ACTIVATOR_RAIL) || s.is(Blocks.REDSTONE_WIRE) || s.is(Blocks.REPEATER)
-                || s.is(Blocks.COMPARATOR) || s.is(Blocks.LEVER))) return 2;
-        return 0;
-    }
-
-    public void renderHud(Minecraft client, GuiGraphics g) {
-        if (!isEnabled() || !FeatureAccess.allowed(client) || client.options.hideGui || client.screen != null) return;
-        List<Detection> found = new ArrayList<>(renderDetections);
-        found.sort(Comparator.comparingDouble(d -> distance(client, d)));
-        int count = Math.min(3, found.size()), x = 12, y = 12, w = 226, h = 57 + count * 25;
-        g.fill(x, y, x + w, y + h, 0xD9101420); g.fill(x, y, x + 3, y + h, 0xFFB493FF);
-        g.fill(x + 3, y + 30, x + w, y + 31, 0x554E4269);
-        g.drawString(client.font, Component.literal("CHUNK FINDER"), x + 12, y + 8, 0xFFF0E8FF, true);
-        g.drawString(client.font, Component.literal("VISUALS / ACTIVE"), x + w - 112, y + 8, 0xFFA9E3CD, true);
-        g.drawString(client.font, Component.literal("RADIUS " + simulationDistance() + " CHUNKS  ·  SENS " + sensitivity()),
-                x + 12, y + 19, 0xFFB6BAC8, false);
-        if (found.isEmpty()) {
-            g.drawString(client.font, Component.literal("Scanning loaded chunks…"), x + 12, y + 39, 0xFFD1D5E0, false);
-            g.drawString(client.font, Component.literal("Press K to adjust module settings"), x + 12, y + 52, 0xFF8E96A8, false);
-            return;
-        }
-        int row = y + 38;
-        for (int i = 0; i < count; i++, row += 25) {
-            Detection d = found.get(i);
-            boolean geode = d.kind() == Kind.GEODE;
-            g.drawString(client.font, Component.literal(geode ? "AMETHYST GEODE" : "ACTIVITY CLUES"),
-                    x + 12, row, geode ? 0xFFD7B7FF : 0xFFFFCE8D, true);
-            g.drawString(client.font, Component.literal(String.format("%d, %d, %d  ·  %dm",
-                    (int) d.x(), (int) d.y(), (int) d.z(), Math.round(distance(client, d)))),
-                    x + 12, row + 11, 0xFFE1E4EE, false);
-            g.drawString(client.font, Component.literal(geode ? d.evidence() + " budding blocks" : "signal " + d.evidence()),
-                    x + w - 88, row, 0xFF9FA7B8, false);
+                || s.is(Blocks.COMPARATOR) || s.is(Blocks.LEVER)) {
+            clues.observe(x, y, z, BaseClues.Family.TRANSPORT, 2, false);
         }
     }
 
@@ -257,9 +249,9 @@ public final class ChunkFinderModule extends Module {
         PoseStack matrices = context.matrices();
         VertexConsumer lines = context.consumers().getBuffer(
                 net.minecraft.client.renderer.rendertype.ChunkFinderThroughWallLines.renderType());
-        for (Detection detection : Nearest.select(renderDetections, 64,
-                d -> new Vec3(d.x(), d.y(), d.z()).distanceToSqr(camera))) {
-            int color = detection.kind() == Kind.GEODE ? 0xFFB493FF : 0xFFFFCE8D;
+        for (Detection detection : nearestDetections) {
+            String colorId = detection.kind() == Kind.GEODE ? "chunkfinder:geode" : "chunkfinder:base_clue";
+            int color = colors.color(colorId, automaticColor(colorId));
             AABB bounds = detection.bounds();
             for (int layer = 2; layer >= 0; layer--) {
                 double padding = 0.025 + layer * 0.045;
@@ -273,10 +265,6 @@ public final class ChunkFinderModule extends Module {
         }
     }
 
-    private static double distance(Minecraft c, Detection d) {
-        double x = c.player.getX() - d.x(), y = c.player.getY() - d.y(), z = c.player.getZ() - d.z();
-        return Math.sqrt(x * x + y * y + z * z);
-    }
     private static long square(int n) { return (long) n * n; }
     private record ChunkCoord(int x, int z) { }
     private record Detection(Kind kind, double x, double y, double z, int evidence, AABB bounds) { }
