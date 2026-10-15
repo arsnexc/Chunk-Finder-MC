@@ -73,6 +73,7 @@ public final class ClientModuleContractTest implements FabricClientGameTest {
             assertions += ClientFreecamContractChecks.run(client);
             assertions += ClientExposureContractChecks.run();
             assertions += ClientPresentationContractChecks.run(client);
+            assertions += ClientTargetPolicyChecks.run();
         });
         System.out.println("Minecraft module contract tests passed (" + assertions + " assertions).");
         System.out.println("Actual Minecraft height/traversal/collision/input/camera/block-state APIs with synthetic block access; no world/server or gameplay test.");

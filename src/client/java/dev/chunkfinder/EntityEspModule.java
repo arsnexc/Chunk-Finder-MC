@@ -2,7 +2,9 @@ package dev.chunkfinder;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import dev.chunkfinder.core.Nearest;
+import dev.chunkfinder.core.FairTargetBuffer;
+import dev.chunkfinder.core.TargetPolicies;
+import dev.chunkfinder.settings.TargetPolicyConfig;
 import dev.chunkfinder.settings.PaletteConfig;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.world.entity.MobCategory;
@@ -34,6 +36,7 @@ public final class EntityEspModule extends Module {
     private final Mode mode;
     private final OverlaySettings settings;
     private final PaletteConfig colors;
+    private final TargetPolicyConfig policies;
     private Set<EntityType<?>> entityTypes = Set.of();
     private Set<Item> items = Set.of();
     private List<Entity> nearest = List.of();
@@ -43,6 +46,7 @@ public final class EntityEspModule extends Module {
     public EntityEspModule(Mode mode) {
         super(mode == Mode.ENTITIES ? "Entity ESP" : "Dropped Item ESP", ModuleCategory.VISUALS, false);
         this.mode = mode;
+        policies=new TargetPolicyConfig(FabricLoader.getInstance().getConfigDir().resolve(mode==Mode.ENTITIES?"chunkfinder-rules-entities.json":"chunkfinder-rules-items.json"));
         colors = new PaletteConfig(FabricLoader.getInstance().getConfigDir().resolve(mode == Mode.ENTITIES ? "chunkfinder-colors-entities.json" : "chunkfinder-colors-items.json"), mode == Mode.ENTITIES ? 0xFF89E6B6 : 0xFFFFD27B);
         settings = new OverlaySettings(mode == Mode.ENTITIES ? "chunkfinder-entities.json" : "chunkfinder-dropped-items.json",
                 48, 16, 128, mode == Mode.ENTITIES ? "entityIds" : "itemIds",
@@ -51,6 +55,8 @@ public final class EntityEspModule extends Module {
         super.setEnabled(settings.enabled());
     }
 
+    public TargetPolicyConfig policies(){return policies;}
+    public void setPolicies(TargetPolicies.Snapshot value){if(policies.snapshot().equals(value))return;policies.apply(value);invalidate();}
     public PaletteConfig colors() { return colors; }
     public int detectedCount() { return nearbyCount; }
     public int automaticColor(String id) {
@@ -103,14 +109,16 @@ public final class EntityEspModule extends Module {
         if (settings.targets().isEmpty()) { nearest = List.of(); nearbyCount = 0; return; }
         Vec3 viewpoint = client.gameRenderer.getMainCamera().position();
         double rangeSquared = (double) range() * range();
-        Nearest<Entity> found = new Nearest<>(MAX_OUTLINES);
+        FairTargetBuffer<Entity> found = new FairTargetBuffer<>(MAX_OUTLINES,policies.snapshot(),true);
         nearbyCount = 0;
         for (Entity entity : client.level.entitiesForRendering()) {
             if (entity == client.player || !matches(entity)) continue;
             double distance = entity.position().distanceToSqr(viewpoint);
             if (distance > rangeSquared) continue;
+            String id=targetId(entity);var rule=policies.snapshot().rule(id);
+            if(rule.limit()==0 || rule.range()>0 && distance>(double)rule.range()*rule.range())continue;
             nearbyCount++;
-            found.offer(entity, distance);
+            found.offer(entity,id,distance);
         }
         nearest = found.values();
     }
@@ -124,10 +132,18 @@ public final class EntityEspModule extends Module {
                 net.minecraft.client.renderer.rendertype.ChunkFinderThroughWallLines.renderType());
         for (Entity entity : nearest) {
             if (!matches(entity)) continue;
+            var rule=policies.snapshot().rule(targetId(entity));
+            double maximum=rule.range()==0?range():Math.min(range(),rule.range());
+            if(rule.limit()==0 || entity.position().distanceToSqr(camera)>maximum*maximum)continue;
             AABB box = entity.getBoundingBox().inflate(0.07);
             ShapeRenderer.renderShape(matrices, lines, Shapes.box(box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ),
                     -camera.x, -camera.y, -camera.z, color(entity), 1.0F);
         }
+    }
+    private String targetId(Entity entity) {
+        return mode==Mode.DROPPED_ITEMS && entity instanceof ItemEntity item
+                ? BuiltInRegistries.ITEM.getKey(item.getItem().getItem()).toString()
+                : BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString();
     }
     private int color(Entity entity) {
         if (mode == Mode.DROPPED_ITEMS && entity instanceof ItemEntity item)

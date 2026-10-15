@@ -1,0 +1,189 @@
+{
+  "run": 38715957096,
+  "commit": "7ca755e17aa9f4e28e79ec94186e84b191b807a7",
+  "reports": {
+    "sodium": {
+      "rendererVariant": "sodium",
+      "environment": "GitHub Actions / Xvfb / Mesa software rendering / 1280x720; not desktop GPU results",
+      "shaderPack": "none requested; actual state recorded with measurements",
+      "baseline": {
+        "version": "2.7.0-rc.1",
+        "renderer": "Sodium 0.8.14+mc1.21.11",
+        "shaders": "not installed",
+        "cpuFrame": {
+          "samples": 593,
+          "meanMs": 11.609945608768971,
+          "medianMs": 11.284749,
+          "p95Ms": 14.068488,
+          "maxMs": 26.193495
+        },
+        "interval": {
+          "samples": 592,
+          "meanMs": 16.85404794087838,
+          "medianMs": 16.754272,
+          "p95Ms": 19.485957,
+          "maxMs": 31.555646
+        },
+        "heapBytes": 499268456,
+        "peakHeapBytes": 498219880,
+        "frames": 593
+      },
+      "firstBlockScanTicks": 15,
+      "sharedReadCache": {
+        "cached": 552,
+        "reads": 552,
+        "hits": 1101,
+        "totalReads": 114727,
+        "totalHits": 229424,
+        "invalidations": 0
+      },
+      "modulesEnabled": {
+        "version": "2.7.0-rc.1",
+        "renderer": "Sodium 0.8.14+mc1.21.11",
+        "shaders": "not installed",
+        "cpuFrame": {
+          "samples": 592,
+          "meanMs": 11.269318273648649,
+          "medianMs": 10.841469,
+          "p95Ms": 14.065685,
+          "maxMs": 27.897967
+        },
+        "interval": {
+          "samples": 591,
+          "meanMs": 16.88649621996616,
+          "medianMs": 16.783084,
+          "p95Ms": 19.554742,
+          "maxMs": 36.667991
+        },
+        "heapBytes": 635615872,
+        "peakHeapBytes": 635583336,
+        "frames": 592
+      },
+      "receivedUpdateLatencyTicks": 2,
+      "assertions": 21,
+      "result": "passed"
+    },
+    "iris": {
+      "rendererVariant": "iris",
+      "environment": "GitHub Actions / Xvfb / Mesa software rendering / 1280x720; not desktop GPU results",
+      "shaderPack": "none requested; actual state recorded with measurements",
+      "baseline": {
+        "version": "2.7.0-rc.1",
+        "renderer": "Iris 1.10.8+mc1.21.11 / Sodium 0.8.14+mc1.21.11",
+        "shaders": "disabled",
+        "cpuFrame": {
+          "samples": 470,
+          "meanMs": 18.287779180851064,
+          "medianMs": 17.255359,
+          "p95Ms": 22.401631,
+          "maxMs": 74.26768
+        },
+        "interval": {
+          "samples": 469,
+          "meanMs": 21.383627309168443,
+          "medianMs": 20.217611,
+          "p95Ms": 27.618858,
+          "maxMs": 84.596987
+        },
+        "heapBytes": 540209208,
+        "peakHeapBytes": 632158240,
+        "frames": 470
+      },
+      "firstBlockScanTicks": 15,
+      "sharedReadCache": {
+        "cached": 552,
+        "reads": 552,
+        "hits": 1101,
+        "totalReads": 114727,
+        "totalHits": 229424,
+        "invalidations": 0
+      },
+      "modulesEnabled": {
+        "version": "2.7.0-rc.1",
+        "renderer": "Iris 1.10.8+mc1.21.11 / Sodium 0.8.14+mc1.21.11",
+        "shaders": "disabled",
+        "cpuFrame": {
+          "samples": 475,
+          "meanMs": 18.056765130526315,
+          "medianMs": 17.426776,
+          "p95Ms": 22.308448,
+          "maxMs": 27.723503
+        },
+        "interval": {
+          "samples": 474,
+          "meanMs": 21.046780314345995,
+          "medianMs": 20.527931,
+          "p95Ms": 26.617448,
+          "maxMs": 31.523297
+        },
+        "heapBytes": 653409128,
+        "peakHeapBytes": 653409128,
+        "frames": 475
+      },
+      "receivedUpdateLatencyTicks": 2,
+      "assertions": 21,
+      "result": "passed"
+    },
+    "vanilla": {
+      "rendererVariant": "vanilla",
+      "environment": "GitHub Actions / Xvfb / Mesa software rendering / 1280x720; not desktop GPU results",
+      "shaderPack": "none requested; actual state recorded with measurements",
+      "baseline": {
+        "version": "2.7.0-rc.1",
+        "renderer": "Vanilla Fabric",
+        "shaders": "not installed",
+        "cpuFrame": {
+          "samples": 423,
+          "meanMs": 19.627498761229315,
+          "medianMs": 18.31339,
+          "p95Ms": 23.721771,
+          "maxMs": 88.109375
+        },
+        "interval": {
+          "samples": 422,
+          "meanMs": 23.748141902843603,
+          "medianMs": 22.680598,
+          "p95Ms": 32.112268,
+          "maxMs": 75.058626
+        },
+        "heapBytes": 410231728,
+        "peakHeapBytes": 636631912,
+        "frames": 423
+      },
+      "firstBlockScanTicks": 15,
+      "sharedReadCache": {
+        "cached": 552,
+        "reads": 552,
+        "hits": 1101,
+        "totalReads": 114727,
+        "totalHits": 229424,
+        "invalidations": 0
+      },
+      "modulesEnabled": {
+        "version": "2.7.0-rc.1",
+        "renderer": "Vanilla Fabric",
+        "shaders": "not installed",
+        "cpuFrame": {
+          "samples": 427,
+          "meanMs": 19.30315124824356,
+          "medianMs": 18.536793,
+          "p95Ms": 23.590536,
+          "maxMs": 41.791875
+        },
+        "interval": {
+          "samples": 426,
+          "meanMs": 23.394392676056338,
+          "medianMs": 23.27439,
+          "p95Ms": 31.089227,
+          "maxMs": 57.689692
+        },
+        "heapBytes": 527617752,
+        "peakHeapBytes": 527601352,
+        "frames": 427
+      },
+      "receivedUpdateLatencyTicks": 2,
+      "assertions": 21,
+      "result": "passed"
+    }
+  }
+}

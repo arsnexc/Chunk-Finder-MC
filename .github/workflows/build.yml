@@ -157,6 +157,10 @@ jobs:
                   'dev/chunkfinder/SharedBlockReads.class',
                   'dev/chunkfinder/LoadedChunks.class',
                   'dev/chunkfinder/core/TickReadCache.class',
+                  'dev/chunkfinder/core/TargetPolicies.class',
+                  'dev/chunkfinder/core/FairTargetBuffer.class',
+                  'dev/chunkfinder/settings/TargetPolicyConfig.class',
+                  'dev/chunkfinder/TargetRulesScreen.class',
                   'dev/chunkfinder/mixin/ClientBlockUpdatesMixin.class',
                   'dev/chunkfinder/FreecamTerrainVisibility.class',
                   'dev/chunkfinder/MenuScreen.class',
@@ -209,10 +213,10 @@ jobs:
               for test_class in ('UiRegressionTest', 'UiTestFixtures', 'UiPreview', 'AwtUiCanvas', 'UiEnhancementTest'):
                   assert not any(entry.startswith(f'dev/chunkfinder/ui/{test_class}')
                                  for entry in archive.namelist()), f'Test fixture leaked into mod: {test_class}'
-              for test_class in ('ModuleRegressionTest', 'TrajectoryRegressionTest', 'FilterSettingsRegressionTest', 'PresentationRegressionTest', 'ReliabilityRegressionTest'):
+              for test_class in ('ModuleRegressionTest', 'TrajectoryRegressionTest', 'FilterSettingsRegressionTest', 'PresentationRegressionTest', 'ReliabilityRegressionTest', 'TargetPolicyRegressionTest'):
                   assert not any(entry.startswith(f'dev/chunkfinder/{test_class}')
                                  for entry in archive.namelist()), f'Module test fixture leaked into mod: {test_class}'
-              for test_class in ('ClientScreenSmokeTest', 'ClientModuleContractTest', 'ClientTrajectoryContractChecks', 'ClientFreecamContractChecks', 'ClientExposureContractChecks', 'ClientPresentationContractChecks', 'ClientPresentationUiChecks', 'ClientGameplayTest'):
+              for test_class in ('ClientScreenSmokeTest', 'ClientModuleContractTest', 'ClientTrajectoryContractChecks', 'ClientFreecamContractChecks', 'ClientExposureContractChecks', 'ClientPresentationContractChecks', 'ClientPresentationUiChecks', 'ClientGameplayTest', 'ClientTargetPolicyChecks'):
                   assert not any(entry.startswith(f'dev/chunkfinder/{test_class}')
                                  for entry in archive.namelist()), f'Native client test fixture leaked into mod: {test_class}'
               assert 'fabric-client-gametest' not in metadata['entrypoints'], 'Test entrypoint leaked into mod'

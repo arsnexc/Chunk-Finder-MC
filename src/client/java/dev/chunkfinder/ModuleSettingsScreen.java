@@ -85,6 +85,8 @@ public final class ModuleSettingsScreen extends MenuScreen {
             if (esp instanceof AncientDebrisFinderModule)
                 list.add(toggle("exposed", "Exposed only", "Reduces buried server replacements; client data cannot verify hidden ore", esp::exposedOnly, () -> esp.setExposedOnly(!esp.exposedOnly())));
             else list.add(toggle("buried", "Buried targets", "On: include non-exposed client-reported blocks. Cannot recover server-hidden real states", () -> !esp.exposedOnly(), () -> esp.setExposedOnly(!esp.exposedOnly())));
+            list.add(new Action("rules", "Target rules", "Per-target priority, distance and visible limits", () -> esp.policies().snapshot().targets().size() + " overrides",
+                    () -> Minecraft.getInstance().setScreen(new TargetRulesScreen(this,esp.name(),preferences,esp.targetChoices(),esp.policies().snapshot(),esp::setPolicies))));
             list.add(new Action("colors", "ESP colors", "Module color and per-block overrides; does not change target selection", null,
                     () -> Minecraft.getInstance().setScreen(new EspColorScreen(this, esp.name(), esp.colors(), esp.targetChoices(), id -> esp.colors().fallback()))));
             list.add(radius(esp::searchRadius, esp::setSearchRadius));
@@ -97,6 +99,8 @@ public final class ModuleSettingsScreen extends MenuScreen {
             list.add(new Action("targets", "Targets", "Select entity types or dropped item IDs; empty means no matches", entities::targetSummary,
                     () -> Minecraft.getInstance().setScreen(new TargetPickerScreen(this, entities.name() + " targets",
                             entities.targetChoices(), entities.targetIds(), entities::setTargetIds))));
+            list.add(new Action("rules", "Target rules", "Per-type/item priority, distance and visible limits", () -> entities.policies().snapshot().targets().size() + " overrides",
+                    () -> Minecraft.getInstance().setScreen(new TargetRulesScreen(this,entities.name(),preferences,entities.targetChoices(),entities.policies().snapshot(),entities::setPolicies))));
             list.add(new Action("colors", "ESP colors", "Module color and per-type/item overrides", null,
                     () -> Minecraft.getInstance().setScreen(new EspColorScreen(this, entities.name(), entities.colors(), entities.targetChoices(), entities::automaticColor))));
             list.add(range(entities::range, 16, 128, entities::setRange));

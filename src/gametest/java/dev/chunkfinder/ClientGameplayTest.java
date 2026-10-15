@@ -2,6 +2,7 @@ package dev.chunkfinder;
 
 import com.google.gson.GsonBuilder;
 import dev.chunkfinder.core.TerrainBoundary;
+import dev.chunkfinder.core.TargetPolicies;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.loader.api.FabricLoader;
@@ -136,6 +137,17 @@ public final class ClientGameplayTest implements FabricClientGameTest {
             report.put("receivedUpdateLatencyTicks", refreshTicks);
             check(context.computeOnClient(client -> modules.blockReads().stats().totalHits() > 0), "enabled ESPs reuse real block reads");
             check(context.computeOnClient(client -> modules.blockReads().stats().reads() <= SharedBlockReads.MAX_READS), "shared physical read cap holds in the running world");
+            world.getServer().runCommand("setblock 8 68 10 minecraft:air");
+            world.getServer().runCommand("setblock 14 85 14 minecraft:diamond_ore");
+            context.waitFor(client -> client.level.getBlockState(new BlockPos(14,85,14)).is(Blocks.DIAMOND_ORE)
+                    && client.level.getBlockState(new BlockPos(8,68,10)).isAir(),200);
+            context.runOnClient(client -> {
+                modules.itemEsp().setTargetIds(Set.of("minecraft:stone","minecraft:diamond_ore"));
+                modules.itemEsp().setPolicies(new TargetPolicies.Snapshot(TargetPolicies.DEFAULT_RULE,
+                    Map.of("minecraft:stone",new TargetPolicies.Rule(0,0,2),"minecraft:diamond_ore",new TargetPolicies.Rule(8,0,1))));
+            });
+            context.waitFor(client -> modules.itemEsp().displayedCount("minecraft:diamond_ore")==1 && modules.itemEsp().displayedCount("minecraft:stone")>0,1200);
+            check(context.computeOnClient(client -> modules.itemEsp().displayedCount("minecraft:stone")<=2), "real dense stone cannot crowd out a rare ore or exceed its display cap");
             context.runOnClient(client -> { for (Module module : modules.modules()) module.setEnabled(false); });
         }
         report.put("assertions", assertions); report.put("result","passed");

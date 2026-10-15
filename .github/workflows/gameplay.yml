@@ -85,6 +85,7 @@ jobs:
           assert report['result'] == 'passed'
           assert report['modulesEnabled']['cpuFrame']['samples'] > 30
           PY
+          python3 scripts/check-performance.py build/run/clientGameTest/gameplay-report.json
       - name: Upload isolated test evidence only
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9

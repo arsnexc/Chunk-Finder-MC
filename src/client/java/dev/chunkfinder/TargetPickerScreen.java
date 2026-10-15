@@ -28,6 +28,7 @@ public class TargetPickerScreen extends Screen {
     private final Consumer<Set<String>> apply;
     private final Consumer<String> chooseColor;
     private final String colorScope;
+    private final String choiceNote;
     private EditBox search;
     private int page, keyboardIndex = -1;
     private Focus focus = Focus.SEARCH;
@@ -35,16 +36,19 @@ public class TargetPickerScreen extends Screen {
 
     public TargetPickerScreen(Screen parent, String title, Collection<Entry> choices,
                               Collection<String> initial, Consumer<Set<String>> apply) {
-        this(parent, title, choices, initial, apply, null, "");
+        this(parent, title, choices, initial, apply, null, "", "");
     }
     static TargetPickerScreen colorChoice(Screen parent, Collection<Entry> choices, Collection<String> known,
                                            String scope, Consumer<String> choice) {
-        return new TargetPickerScreen(parent, "Choose color target", choices, known, null, choice, scope);
+        return scopeChoice(parent,"Choose color target","Colors only · ESP target selection is unchanged",choices,known,scope,choice);
+    }
+    static TargetPickerScreen scopeChoice(Screen parent,String title,String note,Collection<Entry> choices,Collection<String> known,String scope,Consumer<String> choice) {
+        return new TargetPickerScreen(parent,title,choices,known,null,choice,scope,note);
     }
     private TargetPickerScreen(Screen parent, String title, Collection<Entry> choices, Collection<String> initial,
-                               Consumer<Set<String>> apply, Consumer<String> chooseColor, String scope) {
+                               Consumer<Set<String>> apply, Consumer<String> chooseColor, String scope, String note) {
         super(Component.literal(title));
-        this.parent = parent; this.heading = title; this.apply = apply; this.chooseColor = chooseColor; colorScope = scope;
+        this.parent = parent; this.heading = title; this.apply = apply; this.chooseColor = chooseColor; colorScope = scope; choiceNote=note;
         selection = new TargetSelection(choices, initial);
     }
     private List<Focus> focusOrder() {
@@ -96,7 +100,7 @@ public class TargetPickerScreen extends Screen {
         if (selection.count() == 0) status += " · matches nothing";
         else if (selection.unavailableCount() > 0) status += " · " + selection.unavailableCount() + " unavailable";
         if (selection.changed()) status += " · unsaved";
-        text(canvas, chooseColor == null ? status : "Colors only · ESP target selection is unchanged", panel.x() + 12, panel.y() + 27, panel.width() - 24, MUTED);
+        text(canvas, chooseColor == null ? status : choiceNote, panel.x() + 12, panel.y() + 27, panel.width() - 24, MUTED);
         if (ui.back().contains(mouseX, mouseY)) rounded(canvas, ui.back(), 3, ROW_HOVER);
         centered(canvas, "×", ui.back(), MUTED);
         outlined(canvas, ui.search(), 4, focus == Focus.SEARCH ? FOCUS : BORDER, ROW);

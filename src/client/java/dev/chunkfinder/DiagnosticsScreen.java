@@ -34,7 +34,7 @@ final class DiagnosticsScreen extends Screen {
         for (BlockEspModule module : List.of(modules.itemEsp(), modules.storageEsp(), modules.spawnerEsp(), modules.ancientDebrisFinder())) {
             next.add(module.name() + ": " + (module.isEnabled() ? "on" : "off") + " · loaded in radius " + module.loadedChunkCount()
                     + " · scanned " + module.scannedChunkCount() + " · queued " + module.pendingChunkCount() + " · edits " + module.pendingUpdates());
-            next.add("  " + module.targetSummary() + " · " + (module.exposedOnly() ? "exposed only" : "buried included") + " · " + module.detectedCount() + " candidates");
+            next.add("  " + module.targetSummary() + " · " + (module.exposedOnly() ? "exposed only" : "buried included") + " · " + module.detectedCount() + " candidates · " + module.policies().snapshot().targets().size() + " policy overrides");
         }
         next.add("Base clues: " + modules.chunkFinder().baseCount() + " · strict " + modules.chunkFinder().strictBaseClues());
         next.add("Loaded/client-reported data only. Server obfuscation cannot be authenticated.");

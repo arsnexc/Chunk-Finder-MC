@@ -20,6 +20,8 @@ public final class LoadedBlockScanner {
         default int maxMatchReads() { return 1; }
         default int lastMatchReads() { return 1; }
         default boolean canRead(int worstCase) { return true; }
+        default String lastMatchTarget() { return ""; }
+        default TargetPolicies.Snapshot policies() { return TargetPolicies.DEFAULT; }
         default boolean emptySection(int chunkX, int chunkZ, int y) { return false; }
     }
     public record Point(int x, int y, int z) {
@@ -29,8 +31,8 @@ public final class LoadedBlockScanner {
         }
     }
     private record Chunk(int x, int z) { }
-    private record Result(List<Point> points, long scannedAt) { }
-    private record Change(boolean matches, long changedAt) { }
+    private record Result(List<Point> points, Map<Point,String> targets, long scannedAt) { }
+    private record Change(boolean matches, long changedAt, String target) { }
     private static final int DISCOVERY_TICKS = 40;
     private static final int REFRESH_TICKS = 200;
     public static final int MATCHES_PER_CHUNK = 128;
@@ -47,6 +49,9 @@ public final class LoadedBlockScanner {
     private int loaded;
     private List<Point> snapshot = List.of();
     private boolean snapshotDirty;
+    private Map<Point,String> snapshotTargets=Map.of(), visibleTargets=Map.of();
+    private TargetPolicies.Snapshot policies=TargetPolicies.DEFAULT;
+    private double originX,originY,originZ;
     private final java.util.LinkedHashMap<Point, Change> changes = new java.util.LinkedHashMap<>();
     private final ArrayDeque<Point> changedQueue = new ArrayDeque<>();
     private final Set<Point> changedQueued = new HashSet<>();
@@ -63,7 +68,7 @@ public final class LoadedBlockScanner {
             Point point=new Point((int)px,(int)py,(int)pz);
             if (!inRadius(new Chunk(point.x>>4,point.z>>4),centerX,centerZ,radius)) continue;
             if (!changes.containsKey(point) && changes.size()>=MAX_CHANGES) { updateOverflows++; clear(); return; }
-            changes.remove(point); changes.put(point,new Change(false,tick));
+            changes.remove(point); changes.put(point,new Change(false,tick,""));
             if (changedQueued.add(point)) changedQueue.addLast(point);
             snapshotDirty=true;
         }
@@ -82,14 +87,14 @@ public final class LoadedBlockScanner {
         changes.clear(); changedQueue.clear(); changedQueued.clear();
         active = null; worldIdentity = null; nextDiscovery = 0; loaded = 0;
         centerX = centerZ = Integer.MIN_VALUE; radius = -1;
-        snapshot = List.of();
+        snapshot = List.of(); snapshotTargets=Map.of(); visibleTargets=Map.of();
         snapshotDirty = false;
     }
 
     public void tick(Object identity, World world, int playerX, int playerY, int playerZ, int requestedRadius) {
         if (identity == null) { clear(); return; }
         if (identity != worldIdentity) { clear(); worldIdentity = identity; }
-        tick++;
+        tick++; policies=world.policies(); originX=playerX+.5; originY=playerY+.5; originZ=playerZ+.5;
         int cx = playerX >> 4, cz = playerZ >> 4, r = Math.max(0, Math.min(12, requestedRadius));
         if (world.maxY() <= world.minY()) { clear(); return; }
         if (cx != centerX || cz != centerZ || r != radius || tick >= nextDiscovery)
@@ -106,7 +111,7 @@ public final class LoadedBlockScanner {
             if (reads<0 || reads>maxReads) throw new IllegalStateException("Update exceeded declared read budget");
             remaining-=Math.max(1,reads);
             Change previous=changes.get(point);
-            changes.put(point,new Change(match,previous==null?tick:previous.changedAt)); snapshotDirty=true;
+            changes.put(point,new Change(match,previous==null?tick:previous.changedAt,match?world.lastMatchTarget():"")); snapshotDirty=true;
         }
         validateOneChunk(world);
         while (remaining > 0) {
@@ -114,7 +119,7 @@ public final class LoadedBlockScanner {
                 Chunk next = queue.pollFirst();
                 if (next == null) break;
                 if (!world.loaded(next.x, next.z) || !inRadius(next, cx, cz, r)) { remove(next); continue; }
-                active = new Scan(next, world.minY(), world.maxY(), playerX, playerY, playerZ, tick);
+                active = new Scan(next, world.minY(), world.maxY(), playerX, playerY, playerZ, tick, policies);
             }
             Scan scan = active;
             // A chunk can unload between slices. Never continue reading or publish a partial stale scan.
@@ -138,7 +143,7 @@ public final class LoadedBlockScanner {
                     if (world.matches(x, y, z)) {
                         double distance = square(x + 0.5 - scan.originX) + square(y + 0.5 - scan.originY)
                                 + square(z + 0.5 - scan.originZ);
-                        if (scan.found.accepts(distance)) scan.found.offer(new Point(x, y, z), distance);
+                        if (scan.found.accepts(world.lastMatchTarget(),distance)) scan.found.offer(new Point(x, y, z), world.lastMatchTarget(), distance);
                     }
                     int reads = world.lastMatchReads();
                     if (reads < 0 || reads > maxReads) throw new IllegalStateException("Match exceeded declared read budget");
@@ -146,7 +151,9 @@ public final class LoadedBlockScanner {
                 }
             }
             if (scan.cursor >= scan.total) {
-                results.put(scan.chunk, new Result(scan.found.values(), tick));
+                Map<Point,String> ids=new HashMap<>();
+                for(var entry:scan.found.entries()) if(!entry.target().isEmpty())ids.put(entry.value(),entry.target());
+                results.put(scan.chunk, new Result(scan.found.values(), Map.copyOf(ids), tick));
                 // Updates newer than this scan began override its partial observations.
                 changes.entrySet().removeIf(e -> (e.getKey().x>>4)==scan.chunk.x && (e.getKey().z>>4)==scan.chunk.z
                         && e.getValue().changedAt < scan.startedAt);
@@ -197,10 +204,12 @@ public final class LoadedBlockScanner {
         if (!world.canRead(result.points.size() * world.maxMatchReads())) {
             validation.addFirst(chunk); validationQueued.add(chunk); return;
         }
-        List<Point> live = result.points.stream().filter(p -> world.matches(p.x, p.y, p.z)).toList();
-        if (live.size() != result.points.size()) {
-            results.put(chunk, new Result(live, result.scannedAt));
-            snapshotDirty = true;
+        List<Point> live=new ArrayList<>();Map<Point,String> ids=new HashMap<>();
+        for(Point point:result.points) if(world.matches(point.x,point.y,point.z)) {
+            live.add(point);if(!world.lastMatchTarget().isEmpty())ids.put(point,world.lastMatchTarget());
+        }
+        if (!live.equals(result.points) || !ids.equals(result.targets)) {
+            results.put(chunk, new Result(List.copyOf(live),Map.copyOf(ids),result.scannedAt));snapshotDirty=true;
         }
         validation.addLast(chunk); validationQueued.add(chunk);
     }
@@ -215,32 +224,22 @@ public final class LoadedBlockScanner {
         if (!snapshotDirty) return;
         // Many short/empty chunks can finish inside one budget. Flatten their cache
         // only once at the end of the scan tick, not after each completion.
-        if (changes.isEmpty()) snapshot = results.values().stream().flatMap(r -> r.points.stream()).toList();
-        else {
-            Map<Chunk, java.util.LinkedHashMap<Point,Change>> grouped = new HashMap<>();
-            changes.forEach((point,change)->grouped.computeIfAbsent(new Chunk(point.x>>4,point.z>>4),ignored->new java.util.LinkedHashMap<>()).put(point,change));
-            List<Point> merged = new ArrayList<>();
-            for (var entry:results.entrySet()) {
-                var edits=grouped.remove(entry.getKey());
-                if(edits==null) merged.addAll(entry.getValue().points);
-                else appendUpdated(merged,entry.getValue().points,edits);
-            }
-            for(var edits:grouped.values()) appendUpdated(merged,List.of(),edits);
-            snapshot=List.copyOf(merged);
+        List<Point> merged=new ArrayList<>();Map<Point,String> ids=new HashMap<>();
+        Map<Chunk,java.util.LinkedHashMap<Point,Change>> grouped=new HashMap<>();
+        changes.forEach((point,change)->grouped.computeIfAbsent(new Chunk(point.x>>4,point.z>>4),ignored->new java.util.LinkedHashMap<>()).put(point,change));
+        for(var entry:results.entrySet()) {
+            var edits=grouped.remove(entry.getKey());
+            if(edits==null){merged.addAll(entry.getValue().points);ids.putAll(entry.getValue().targets);}
+            else appendUpdated(merged,ids,entry.getValue().points,entry.getValue().targets,edits);
         }
-        snapshotDirty = false;
+        for(var edits:grouped.values())appendUpdated(merged,ids,List.of(),Map.of(),edits);
+        snapshot=List.copyOf(merged);snapshotTargets=Map.copyOf(ids);snapshotDirty=false;
     }
-    private static void appendUpdated(List<Point> output, List<Point> old, java.util.LinkedHashMap<Point,Change> edits) {
-        java.util.LinkedHashSet<Point> retained=new java.util.LinkedHashSet<>();
-        List<Point> recent=new ArrayList<>(edits.keySet());
-        for(int i=recent.size()-1;i>=0 && retained.size()<MATCHES_PER_CHUNK;i--) {
-            Point point=recent.get(i); if(edits.get(point).matches) retained.add(point);
-        }
-        for(Point point:old) {
-            if(retained.size()>=MATCHES_PER_CHUNK) break;
-            Change change=edits.get(point); if(change==null || change.matches) retained.add(point);
-        }
-        output.addAll(retained);
+    private void appendUpdated(List<Point> output,Map<Point,String> ids,List<Point> old,Map<Point,String> oldIds,java.util.LinkedHashMap<Point,Change> edits) {
+        FairTargetBuffer<Point> retained=new FairTargetBuffer<>(MATCHES_PER_CHUNK,policies,false);
+        for(Point point:old)if(!edits.containsKey(point))retained.offer(point,oldIds.getOrDefault(point,""),point.distanceSquared(originX,originY,originZ));
+        edits.forEach((point,change)->{if(change.matches)retained.offer(point,change.target,point.distanceSquared(originX,originY,originZ));});
+        for(var entry:retained.entries()){output.add(entry.value());if(!entry.target().isEmpty())ids.put(entry.value(),entry.target());}
     }
 
     private static boolean inRadius(Chunk c, int x, int z, int r) {
@@ -248,6 +247,7 @@ public final class LoadedBlockScanner {
     }
     private static double square(double n) { return n * n; }
     public List<Point> points() { return snapshot; }
+    public String targetId(Point point) { return visibleTargets.getOrDefault(point,snapshotTargets.getOrDefault(point,"")); }
     public List<Point> nearest(double x, double y, double z, int limit) {
         return Nearest.select(snapshot, limit, p -> p.distanceSquared(x, y, z));
     }
@@ -260,11 +260,19 @@ public final class LoadedBlockScanner {
         List<Point> live = new ArrayList<>();
         Map<Chunk, Set<Point>> invalid = new HashMap<>();
         Set<Chunk> unloaded = new HashSet<>();
-        for (Point point : nearest(x, y, z, limit)) {
+        FairTargetBuffer<Point> candidates=new FairTargetBuffer<>(limit,world.policies(),true);
+        for(Point point:snapshot)candidates.offer(point,snapshotTargets.getOrDefault(point,""),point.distanceSquared(x,y,z));
+        Map<Point,String> liveIds=new HashMap<>();Map<String,Integer> typeCounts=new HashMap<>();
+        for (Point point : candidates.values()) {
             if (!world.canRead(world.maxMatchReads())) break;
             Chunk chunk = new Chunk(point.x >> 4, point.z >> 4);
             if (!world.loaded(chunk.x, chunk.z)) unloaded.add(chunk);
-            else if (world.matches(point.x, point.y, point.z)) live.add(point);
+            else if (world.matches(point.x, point.y, point.z)) {
+                String id=world.lastMatchTarget();TargetPolicies.Rule rule=world.policies().rule(id);
+                if(typeCounts.getOrDefault(id,0)<rule.limit() && (rule.range()==0 || point.distanceSquared(x,y,z)<=(double)rule.range()*rule.range())){
+                    live.add(point);liveIds.put(point,id);typeCounts.merge(id,1,Integer::sum);
+                }
+            }
             else invalid.computeIfAbsent(chunk, ignored -> new HashSet<>()).add(point);
         }
         boolean changed = results.keySet().removeAll(unloaded);
@@ -276,17 +284,19 @@ public final class LoadedBlockScanner {
             if (active != null && unloaded.contains(active.chunk)) active = null;
         }
         for (Map.Entry<Chunk, Set<Point>> entry : invalid.entrySet()) {
-            for(Point point:entry.getValue()) if(changes.containsKey(point)) { changes.put(point,new Change(false,tick)); changed=true; }
+            for(Point point:entry.getValue()) if(changes.containsKey(point)) { changes.put(point,new Change(false,tick,"")); changed=true; }
             Result cached = results.get(entry.getKey());
             if (cached == null) continue;
             List<Point> kept = cached.points.stream().filter(p -> !entry.getValue().contains(p)).toList();
             if (kept.size() == cached.points.size()) continue;
             // Preserve refresh age and the empty cached chunk: mining is not a request
             // for an immediate full scan, nor a reason to postpone scheduled refresh.
-            results.put(entry.getKey(), new Result(kept, cached.scannedAt));
+            Map<Point,String> keptIds=new HashMap<>();for(Point p:kept)if(cached.targets.containsKey(p))keptIds.put(p,cached.targets.get(p));
+            results.put(entry.getKey(), new Result(kept,Map.copyOf(keptIds),cached.scannedAt));
             changed = true;
         }
         if (changed) { snapshotDirty = true; publish(); }
+        visibleTargets=Map.copyOf(liveIds);
         return List.copyOf(live);
     }
     public int maxBlockReadsPerTick() { return budget + MATCHES_PER_CHUNK; }
@@ -300,10 +310,11 @@ public final class LoadedBlockScanner {
         final Chunk chunk;
         final int minY, maxY, total;
         final double originX, originY, originZ;
-        final Nearest<Point> found = new Nearest<>(MATCHES_PER_CHUNK);
+        final FairTargetBuffer<Point> found;
         int cursor;
         final long startedAt;
-        Scan(Chunk chunk, int minY, int maxY, int x, int y, int z, long startedAt) {
+        Scan(Chunk chunk, int minY, int maxY, int x, int y, int z, long startedAt, TargetPolicies.Snapshot policies) {
+            found=new FairTargetBuffer<>(MATCHES_PER_CHUNK,policies,false);
             this.startedAt=startedAt;
             this.chunk = chunk; this.minY = minY; this.maxY = maxY;
             total = 256 * (maxY - minY);

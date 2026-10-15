@@ -19,7 +19,8 @@ public final class RuntimeDiagnostics {
     public void reset() { cpu.clear(); interval.clear(); last = peakHeap = frames = 0; }
     private static long usedHeap() { Runtime r = Runtime.getRuntime(); return r.totalMemory() - r.freeMemory(); }
     public Snapshot snapshot() {
-        return new Snapshot(version("chunkfinder"), renderer(), shaderState(), cpu.summary(), interval.summary(), usedHeap(), peakHeap, frames);
+        long heap=usedHeap();peakHeap=Math.max(peakHeap,heap);
+        return new Snapshot(version("chunkfinder"), renderer(), shaderState(), cpu.summary(), interval.summary(), heap, peakHeap, frames);
     }
     private static String version(String id) {
         return FabricLoader.getInstance().getModContainer(id).map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("absent");

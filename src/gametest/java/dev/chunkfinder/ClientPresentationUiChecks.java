@@ -73,6 +73,21 @@ final class ClientPresentationUiChecks {
         check(context.computeOnClient(client -> new ItemEspModule().colors().color("minecraft:diamond_ore") == 0xFF00CCFF), "real color file survives module reload");
         context.runOnClient(client -> { blocks.colors().apply(original); prefs.contrast(false); prefs.reducedMotion(false); prefs.minimized(Set.of()); });
 
+        var originalRules=context.computeOnClient(client -> blocks.policies().snapshot());
+        context.setScreen(() -> new TargetRulesScreen(parent,blocks.name(),prefs,blocks.targetChoices(),originalRules,blocks::setPolicies));
+        for(int i=0;i<4;i++)context.getInput().pressKey(GLFW.GLFW_KEY_TAB);
+        context.getInput().pressKey(GLFW.GLFW_KEY_RIGHT);
+        check(context.computeOnClient(client -> blocks.policies().snapshot().equals(originalRules)), "target rule slider edits remain a draft");
+        context.getInput().pressKey(GLFW.GLFW_KEY_ESCAPE);
+        check(context.computeOnClient(client -> blocks.policies().snapshot().equals(originalRules)), "rule Escape cancels without resetting scans/settings");
+        context.setScreen(() -> new TargetRulesScreen(parent,blocks.name(),prefs,blocks.targetChoices(),originalRules,blocks::setPolicies));
+        for(int i=0;i<4;i++)context.getInput().pressKey(GLFW.GLFW_KEY_TAB);
+        context.getInput().pressKey(GLFW.GLFW_KEY_RIGHT);
+        for(int i=0;i<5;i++)context.getInput().pressKey(GLFW.GLFW_KEY_TAB);
+        context.getInput().pressKey(GLFW.GLFW_KEY_ENTER);
+        check(context.computeOnClient(client -> client.screen==parent && blocks.policies().snapshot().defaults().priority()==1), "keyboard reaches and applies target rules");
+        check(context.computeOnClient(client -> blocks.targetIds().equals(targets)), "target rule Apply never changes selected IDs");
+        context.runOnClient(client -> blocks.setPolicies(originalRules));
         context.setScreen(HudPreview::new); context.waitTicks(2);
         screenshot.accept(context.takeScreenshot("compact-hud-native-synthetic").toString());
         return assertions;
