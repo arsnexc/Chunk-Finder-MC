@@ -1,5 +1,7 @@
 # 2.5.1 — Scanner boundaries, candidate eviction and Freecam controls
 
+> Retained in 2.5.2; see [the trajectory follow-up](TRAJECTORY_FIXES_2_5_2.md) for newer changes and test scope.
+
 This is a runtime bug-fix update to 2.5.0, not another visual redesign. All
 multi-target pickers, config filenames, selected IDs and scalar options remain
 compatible. Replace the older mod JAR; do not delete your configs.

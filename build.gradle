@@ -70,7 +70,7 @@ tasks.named('check') {
     dependsOn tasks.named('uiRegressionTest'), tasks.named('moduleRegressionTest')
 }
 
-// Native UI and height API-contract tests are a separate development-only mod, never shipped.
+// Native UI and module API-contract tests are a separate development-only mod, never shipped.
 // Synthetic block access only: no world/server is started and no server EULA is accepted.
 fabricApi.configureTests {
     createSourceSet = true

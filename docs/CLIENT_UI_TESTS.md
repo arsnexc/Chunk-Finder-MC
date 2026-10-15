@@ -2,7 +2,7 @@
 
 The separate `src/gametest` test mod uses Fabric's client game-test API to launch
 a real **Minecraft 1.21.11** client and exercise the production screens. A second
-entrypoint checks native height API contracts with synthetic block access. Both
+entrypoint checks native height and trajectory API contracts with synthetic block access. Both
 are excluded from the installable Chunk Finder JAR.
 
 ## Recorded result
@@ -13,7 +13,8 @@ and **984 module** regression assertions. It captured four native screenshots.
 The newly built 2.5.0 JAR was byte-for-byte identical to the prior 2.5.0 artifact:
 that 2.5.0 follow-up added tests and CI support, not gameplay changes. The later
 [2.5.1 patch](MODULE_FIXES_2_5_1.md) contains runtime fixes and the additional
-height API-contract entrypoint; consult its build for current results.
+height API-contract entrypoint. The [2.5.2 patch](TRAJECTORY_FIXES_2_5_2.md) adds
+trajectory traversal/collision contracts; consult the intended build for current results.
 
 ## UI coverage
 
@@ -37,6 +38,12 @@ Overworld, Nether-style, negative and single-layer height ranges. It also checks
 that all 24 full-height empty sections can be skipped without individual block
 reads. These are API/algorithm checks, **not live world scanning**. Their separate
 success marker is required alongside the UI marker before JAR upload.
+
+The same entrypoint also runs `ClientTrajectoryContractChecks`: real Minecraft
+voxel traversal and vanilla collision shapes, with synthetic block/chunk data.
+These cover unloaded gaps, negative coordinates, diagonal edges, endpoint epsilon,
+availability-query reuse and prediction limits. No `ClientLevel` or server is
+created. They do not exercise live projectile rendering or gameplay timing.
 
 The test run directory is **`build/run/clientGameTest`**. Only that isolated
 run's configs are changed. The client tests do not open/create a world or run a

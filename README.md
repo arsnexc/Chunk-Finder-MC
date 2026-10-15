@@ -1,13 +1,13 @@
-# Chunk Finder 2.5.1
+# Chunk Finder 2.5.2
 
 [![Build mod](https://github.com/arsnexc/Chunk-Finder-MC/actions/workflows/build.yml/badge.svg)](https://github.com/arsnexc/Chunk-Finder-MC/actions/workflows/build.yml)
 
-Standalone Minecraft **1.21.11 Fabric** mod project. The Chunk Finder 2.5.1 source lives at this repository's root. Requires Java 21 to run Minecraft, Fabric Loader >=0.19.5 and Fabric API. Build with **JDK 25** for the Fabric Loom toolchain.
+Standalone Minecraft **1.21.11 Fabric** mod project. The Chunk Finder 2.5.2 source lives at this repository's root. Requires Java 21 to run Minecraft, Fabric Loader >=0.19.5 and Fabric API. Build with **JDK 25** for the Fabric Loom toolchain.
 
 ## Download the mod — no local build needed
 
 1. Open [GitHub Actions](https://github.com/arsnexc/Chunk-Finder-MC/actions/workflows/build.yml) and select the latest successful **Build mod** run for the branch containing this version. Until the UI changes are merged, use `arena/64b54617-chunk-finder-mc`, not the older `main` build.
-2. Under **Artifacts**, download **chunk-finder-2-2.5.1.jar** (GitHub sign-in is required). This is the installable JAR, not the sources JAR; no ZIP extraction is needed.
+2. Under **Artifacts**, download **chunk-finder-2-2.5.2.jar** (GitHub sign-in is required). This is the installable JAR, not the sources JAR; no ZIP extraction is needed.
 3. Put it in your Minecraft 1.21.11 Fabric instance's `mods/` folder alongside Fabric API, and remove older Chunk Finder versions.
 
 The workflow builds automatically on pushes and pull requests, can also be run manually from Actions, and retains the JAR artifact for 90 days. Build caches and generated JARs are not committed to the repository.
@@ -20,9 +20,18 @@ GitHub Actions runs the command below with **JDK 25**. To reproduce the build yo
 ./gradlew --no-daemon clean build
 ```
 
-On Windows use `gradlew.bat --no-daemon clean build`. Install **only** `build/libs/chunk-finder-2-2.5.1.jar` in the game's `mods/` folder; remove older Chunk Finder versions. Building needs access to Gradle, Fabric, Mojang and Maven repositories.
+On Windows use `gradlew.bat --no-daemon clean build`. Install **only** `build/libs/chunk-finder-2-2.5.2.jar` in the game's `mods/` folder; remove older Chunk Finder versions. Building needs access to Gradle, Fabric, Mojang and Maven repositories.
 
-## Fixed in 2.5.1
+## Fixed in 2.5.2
+
+- Trajectories preflight every crossed chunk using Minecraft's native traversal, not just the endpoint.
+- Prediction runs once per client tick; render frames draw cached paths instead of repeating collision queries.
+- Previews have hard limits of 72 steps, 32 blocks per segment and 256 blocks total per object; invalid/zero-length data is rejected safely.
+- The existing 24-object cap, 96-block starting range, settings and approximate physics remain.
+
+See [2.5.2 trajectory fixes and test limits](docs/TRAJECTORY_FIXES_2_5_2.md). Existing configs and multi-target selections are retained.
+
+## Fixes retained from 2.5.1
 
 - Scanners now include the top build layer; Minecraft 1.21.11's `getMaxY()` is inclusive.
 - Freecam A/D strafes in the correct camera-relative direction, without full-speed drift from near-canceling vertical input.
@@ -58,7 +67,7 @@ Each module retains its existing local settings. All modules start off on a clea
 | Spawner ESP **new** | Select normal and/or trial spawners in loaded chunks, with outlines and traces. |
 | Entity ESP **new** | Select client-visible entity types (mobs/players by default, optional additional types), with color-coded outlines and a master Players switch. |
 | Dropped Item ESP **new** | Filter multiple dropped item IDs; outline matches and show nearest item names and optional stack counts. |
-| Trajectories | Approximate current moving projectile/dropped-item flight paths up to client-visible block collisions. |
+| Trajectories | Budgeted, tick-cached projectile/dropped-item path previews using loaded-chunk collision data. |
 | Target Renderer | Outline the entity or block currently selected by the vanilla crosshair. |
 | Freecam **fixed** | Detached local camera. Mouse-look now turns the detached camera instead of your player; WASD moves relative to camera look, Space/Shift move vertically, Sprint boosts speed. Restores camera and key states on exit/disconnect/respawn and remembers speed across restarts. |
 

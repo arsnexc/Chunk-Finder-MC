@@ -28,7 +28,25 @@ final class TrajectoryQueries {
 
     static boolean segmentLoaded(Point from, Point to, Predicate<BlockPos> loaded) {
         if (!TrajectoryPredictor.canTrace(from, to)) return false;
-        return loaded.test(BlockPos.containing(vector(to)));
+        // Use the very same voxel traversal as clip(), including its endpoint epsilon
+        // and diagonal tie-breaking. Endpoint-only checks miss intervening chunks.
+        return BlockGetter.traverseBlocks(vector(from), vector(to), new LoadedChunks(loaded),
+                (chunks, pos) -> chunks.visit(pos), chunks -> Boolean.TRUE);
+    }
+
+    private static final class LoadedChunks {
+        private final Predicate<BlockPos> loaded;
+        private boolean checked;
+        private int x, z;
+        LoadedChunks(Predicate<BlockPos> loaded) { this.loaded = loaded; }
+        Boolean visit(BlockPos pos) {
+            int nextX = pos.getX() >> 4, nextZ = pos.getZ() >> 4;
+            if (checked && x == nextX && z == nextZ) return null;
+            x = nextX; z = nextZ; checked = true;
+            // Availability is stable during a client-thread prediction. Reuse a
+            // chunk's result across its voxels, particularly long vertical rays.
+            return loaded.test(pos) ? null : Boolean.FALSE;
+        }
     }
 
     static Point point(Vec3 vector) { return new Point(vector.x, vector.y, vector.z); }
