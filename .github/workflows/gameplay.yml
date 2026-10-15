@@ -41,6 +41,8 @@ jobs:
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
           ALSOFT_DRIVERS: 'null'
+          # Use normal packet scheduling; explicit world assertions wait for observable state.
+          JAVA_TOOL_OPTIONS: '-Dfabric.client.gametest.disableNetworkSynchronizer=true'
           CHUNKFINDER_WORLD_TEST: '1'
           CHUNKFINDER_RENDERER: '${{ matrix.renderer }}'
         run: |

@@ -9,6 +9,17 @@ import net.fabricmc.loader.api.FabricLoader;
 import java.util.ArrayList;
 
 public final class ModuleManager {
+    private final SharedBlockReads blockReads = new SharedBlockReads();
+    private int blockTurn;
+    private final ReceivedBlockUpdates updates = new ReceivedBlockUpdates();
+    public int pendingBlockUpdates() { return updates.pending(); }
+    public long receivedBlockUpdates() { return updates.received(); }
+    public long blockUpdateOverflows() { return updates.overflows(); }
+    public void blockUpdated(net.minecraft.client.multiplayer.ClientLevel level, net.minecraft.core.BlockPos pos) {
+        if (net.minecraft.client.Minecraft.getInstance().level != level) return;
+        blockReads.changed(pos); updates.offer(level, pos);
+    }
+    public SharedBlockReads blockReads() { return blockReads; }
     private final RuntimeDiagnostics diagnostics = new RuntimeDiagnostics();
     public RuntimeDiagnostics diagnostics() { return diagnostics; }
     private final InterfaceConfig interfaceSettings = new InterfaceConfig(FabricLoader.getInstance().getConfigDir().resolve("chunkfinder-ui.json"));
@@ -25,6 +36,25 @@ public final class ModuleManager {
     private final FreecamModule freecam = new FreecamModule();
     private final List<Module> modules = List.of(chunkFinder, ancientDebrisFinder, itemEsp,
             storageEsp, spawnerEsp, entityEsp, droppedItemEsp, trajectories, targetRenderer, freecam);
+
+    public ModuleManager() {
+        for (BlockEspModule module : blockModules()) module.useSharedReads(blockReads);
+    }
+    public List<BlockEspModule> blockModules() { return List.of(itemEsp, storageEsp, spawnerEsp, ancientDebrisFinder); }
+    public void tickBlocks(Minecraft client) {
+        blockReads.begin(client.level);
+        var blockModules = blockModules();
+        var batch = updates.drain(client.level, 64);
+        for (var module : blockModules) if (module.isEnabled()) {
+            if (batch.overflow()) module.requestRescan();
+            else for (var point : batch.points()) module.blockChanged(client.level, point.x(), point.y(), point.z());
+        }
+        for (int i=0; i<blockModules.size(); i++) {
+            var module = blockModules.get((blockTurn+i)%blockModules.size());
+            if (module.isEnabled()) module.tick(client);
+        }
+        blockTurn=(blockTurn+1)%blockModules.size();
+    }
 
     public void renderHud(Minecraft client, GuiGraphics graphics) {
         if (!interfaceSettings.hud() || !FeatureAccess.allowed(client) || client.options.hideGui || client.screen != null) return;

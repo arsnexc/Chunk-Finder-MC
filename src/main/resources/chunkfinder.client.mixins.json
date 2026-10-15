@@ -3,6 +3,11 @@
   "minVersion": "0.8",
   "package": "dev.chunkfinder.mixin",
   "compatibilityLevel": "JAVA_21",
-  "client": ["MouseLookMixin"],
-  "injectors": { "defaultRequire": 1 }
+  "client": [
+    "MouseLookMixin",
+    "ClientBlockUpdatesMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
 }

@@ -19,6 +19,7 @@ public final class LoadedBlockScanner {
         /** Maximum/actual state reads in matches(), including optional neighbor checks. */
         default int maxMatchReads() { return 1; }
         default int lastMatchReads() { return 1; }
+        default boolean canRead(int worstCase) { return true; }
         default boolean emptySection(int chunkX, int chunkZ, int y) { return false; }
     }
     public record Point(int x, int y, int z) {
@@ -29,6 +30,7 @@ public final class LoadedBlockScanner {
     }
     private record Chunk(int x, int z) { }
     private record Result(List<Point> points, long scannedAt) { }
+    private record Change(boolean matches, long changedAt) { }
     private static final int DISCOVERY_TICKS = 40;
     private static final int REFRESH_TICKS = 200;
     public static final int MATCHES_PER_CHUNK = 128;
@@ -45,6 +47,30 @@ public final class LoadedBlockScanner {
     private int loaded;
     private List<Point> snapshot = List.of();
     private boolean snapshotDirty;
+    private final java.util.LinkedHashMap<Point, Change> changes = new java.util.LinkedHashMap<>();
+    private final ArrayDeque<Point> changedQueue = new ArrayDeque<>();
+    private final Set<Point> changedQueued = new HashSet<>();
+    private long updateOverflows;
+    private static final int MAX_CHANGES = 2048, UPDATE_PROBES = 64;
+
+    /** Process received updates before distant scanning; exposure depends on all six neighbors. */
+    public void blockChanged(int x, int y, int z) {
+        if (worldIdentity == null) return;
+        int[][] offsets = {{0,0,0},{1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1}};
+        for (int[] offset : offsets) {
+            long px=(long)x+offset[0], py=(long)y+offset[1], pz=(long)z+offset[2];
+            if (px<Integer.MIN_VALUE || px>Integer.MAX_VALUE || py<Integer.MIN_VALUE || py>Integer.MAX_VALUE || pz<Integer.MIN_VALUE || pz>Integer.MAX_VALUE) continue;
+            Point point=new Point((int)px,(int)py,(int)pz);
+            if (!inRadius(new Chunk(point.x>>4,point.z>>4),centerX,centerZ,radius)) continue;
+            if (!changes.containsKey(point) && changes.size()>=MAX_CHANGES) { updateOverflows++; clear(); return; }
+            changes.remove(point); changes.put(point,new Change(false,tick));
+            if (changedQueued.add(point)) changedQueue.addLast(point);
+            snapshotDirty=true;
+        }
+    }
+    public int pendingUpdates() { return changedQueue.size(); }
+    public long updateOverflows() { return updateOverflows; }
+
 
     public LoadedBlockScanner(int budget) {
         if (budget < 1) throw new IllegalArgumentException("Scan budget must be positive");
@@ -53,6 +79,7 @@ public final class LoadedBlockScanner {
 
     public void clear() {
         results.clear(); queue.clear(); validation.clear(); validationQueued.clear();
+        changes.clear(); changedQueue.clear(); changedQueued.clear();
         active = null; worldIdentity = null; nextDiscovery = 0; loaded = 0;
         centerX = centerZ = Integer.MIN_VALUE; radius = -1;
         snapshot = List.of();
@@ -69,14 +96,25 @@ public final class LoadedBlockScanner {
             discover(world, cx, cz, r);
         int maxReads = world.maxMatchReads();
         if (maxReads < 1 || maxReads > budget) throw new IllegalArgumentException("Invalid match read budget");
-        validateOneChunk(world);
         int remaining = budget;
+        for (int i=0;i<UPDATE_PROBES && !changedQueue.isEmpty() && remaining>=maxReads && world.canRead(maxReads);i++) {
+            Point point=changedQueue.removeFirst(); changedQueued.remove(point);
+            if (point.y<world.minY() || point.y>=world.maxY() || !world.loaded(point.x>>4,point.z>>4)
+                    || !inRadius(new Chunk(point.x>>4,point.z>>4),cx,cz,r)) { changes.remove(point); snapshotDirty=true; continue; }
+            boolean match=world.matches(point.x,point.y,point.z);
+            int reads=world.lastMatchReads();
+            if (reads<0 || reads>maxReads) throw new IllegalStateException("Update exceeded declared read budget");
+            remaining-=Math.max(1,reads);
+            Change previous=changes.get(point);
+            changes.put(point,new Change(match,previous==null?tick:previous.changedAt)); snapshotDirty=true;
+        }
+        validateOneChunk(world);
         while (remaining > 0) {
             if (active == null) {
                 Chunk next = queue.pollFirst();
                 if (next == null) break;
                 if (!world.loaded(next.x, next.z) || !inRadius(next, cx, cz, r)) { remove(next); continue; }
-                active = new Scan(next, world.minY(), world.maxY(), playerX, playerY, playerZ);
+                active = new Scan(next, world.minY(), world.maxY(), playerX, playerY, playerZ, tick);
             }
             Scan scan = active;
             // A chunk can unload between slices. Never continue reading or publish a partial stale scan.
@@ -94,7 +132,7 @@ public final class LoadedBlockScanner {
                 } else {
                     // Reserve the worst case, then charge actual work. Non-target
                     // blocks still cost one read even when exposure filtering is on.
-                    if (remaining < maxReads) { remaining = 0; break; }
+                    if (remaining < maxReads || !world.canRead(maxReads)) { remaining = 0; break; }
                     int local = scan.cursor % 256;
                     int x = scan.chunk.x * 16 + local / 16, z = scan.chunk.z * 16 + local % 16;
                     if (world.matches(x, y, z)) {
@@ -109,6 +147,10 @@ public final class LoadedBlockScanner {
             }
             if (scan.cursor >= scan.total) {
                 results.put(scan.chunk, new Result(scan.found.values(), tick));
+                // Updates newer than this scan began override its partial observations.
+                changes.entrySet().removeIf(e -> (e.getKey().x>>4)==scan.chunk.x && (e.getKey().z>>4)==scan.chunk.z
+                        && e.getValue().changedAt < scan.startedAt);
+                pruneUpdateQueue();
                 if (validationQueued.add(scan.chunk)) validation.addLast(scan.chunk);
                 active = null;
                 snapshotDirty = true;
@@ -120,8 +162,11 @@ public final class LoadedBlockScanner {
 
     private void discover(World world, int cx, int cz, int r) {
         boolean removed = results.keySet().removeIf(c -> !inRadius(c, cx, cz, r) || !world.loaded(c.x, c.z));
+        pruneUpdateQueue();
         validation.removeIf(c -> !results.containsKey(c));
         validationQueued.retainAll(results.keySet());
+        if (changes.keySet().removeIf(p -> !inRadius(new Chunk(p.x>>4,p.z>>4),cx,cz,r) || !world.loaded(p.x>>4,p.z>>4))) snapshotDirty=true;
+        pruneUpdateQueue();
         if (removed) snapshotDirty = true;
         if (active != null && (!inRadius(active.chunk, cx, cz, r) || !world.loaded(active.chunk.x, active.chunk.z))) active = null;
         List<Chunk> candidates = new ArrayList<>();
@@ -149,6 +194,9 @@ public final class LoadedBlockScanner {
         Result result = results.get(chunk);
         if (result == null) return;
         if (!world.loaded(chunk.x, chunk.z)) { remove(chunk); return; }
+        if (!world.canRead(result.points.size() * world.maxMatchReads())) {
+            validation.addFirst(chunk); validationQueued.add(chunk); return;
+        }
         List<Point> live = result.points.stream().filter(p -> world.matches(p.x, p.y, p.z)).toList();
         if (live.size() != result.points.size()) {
             results.put(chunk, new Result(live, result.scannedAt));
@@ -157,14 +205,44 @@ public final class LoadedBlockScanner {
         validation.addLast(chunk); validationQueued.add(chunk);
     }
 
-    private void remove(Chunk chunk) { if (results.remove(chunk) != null) snapshotDirty = true; }
+    private void remove(Chunk chunk) {
+        if (results.remove(chunk) != null) snapshotDirty = true;
+        if (changes.keySet().removeIf(p -> (p.x>>4)==chunk.x && (p.z>>4)==chunk.z)) snapshotDirty=true;
+        pruneUpdateQueue();
+    }
+    private void pruneUpdateQueue() { changedQueue.removeIf(p -> !changes.containsKey(p)); changedQueued.retainAll(changes.keySet()); }
     private void publish() {
         if (!snapshotDirty) return;
         // Many short/empty chunks can finish inside one budget. Flatten their cache
         // only once at the end of the scan tick, not after each completion.
-        snapshot = results.values().stream().flatMap(r -> r.points.stream()).toList();
+        if (changes.isEmpty()) snapshot = results.values().stream().flatMap(r -> r.points.stream()).toList();
+        else {
+            Map<Chunk, java.util.LinkedHashMap<Point,Change>> grouped = new HashMap<>();
+            changes.forEach((point,change)->grouped.computeIfAbsent(new Chunk(point.x>>4,point.z>>4),ignored->new java.util.LinkedHashMap<>()).put(point,change));
+            List<Point> merged = new ArrayList<>();
+            for (var entry:results.entrySet()) {
+                var edits=grouped.remove(entry.getKey());
+                if(edits==null) merged.addAll(entry.getValue().points);
+                else appendUpdated(merged,entry.getValue().points,edits);
+            }
+            for(var edits:grouped.values()) appendUpdated(merged,List.of(),edits);
+            snapshot=List.copyOf(merged);
+        }
         snapshotDirty = false;
     }
+    private static void appendUpdated(List<Point> output, List<Point> old, java.util.LinkedHashMap<Point,Change> edits) {
+        java.util.LinkedHashSet<Point> retained=new java.util.LinkedHashSet<>();
+        List<Point> recent=new ArrayList<>(edits.keySet());
+        for(int i=recent.size()-1;i>=0 && retained.size()<MATCHES_PER_CHUNK;i--) {
+            Point point=recent.get(i); if(edits.get(point).matches) retained.add(point);
+        }
+        for(Point point:old) {
+            if(retained.size()>=MATCHES_PER_CHUNK) break;
+            Change change=edits.get(point); if(change==null || change.matches) retained.add(point);
+        }
+        output.addAll(retained);
+    }
+
     private static boolean inRadius(Chunk c, int x, int z, int r) {
         return ChunkRange.contains(c.x, c.z, x, z, r);
     }
@@ -183,6 +261,7 @@ public final class LoadedBlockScanner {
         Map<Chunk, Set<Point>> invalid = new HashMap<>();
         Set<Chunk> unloaded = new HashSet<>();
         for (Point point : nearest(x, y, z, limit)) {
+            if (!world.canRead(world.maxMatchReads())) break;
             Chunk chunk = new Chunk(point.x >> 4, point.z >> 4);
             if (!world.loaded(chunk.x, chunk.z)) unloaded.add(chunk);
             else if (world.matches(point.x, point.y, point.z)) live.add(point);
@@ -190,12 +269,14 @@ public final class LoadedBlockScanner {
         }
         boolean changed = results.keySet().removeAll(unloaded);
         if (!unloaded.isEmpty()) {
+            if (changes.keySet().removeIf(p -> unloaded.contains(new Chunk(p.x>>4,p.z>>4)))) changed=true;
             queue.removeIf(unloaded::contains);
             validation.removeIf(unloaded::contains);
             validationQueued.removeAll(unloaded);
             if (active != null && unloaded.contains(active.chunk)) active = null;
         }
         for (Map.Entry<Chunk, Set<Point>> entry : invalid.entrySet()) {
+            for(Point point:entry.getValue()) if(changes.containsKey(point)) { changes.put(point,new Change(false,tick)); changed=true; }
             Result cached = results.get(entry.getKey());
             if (cached == null) continue;
             List<Point> kept = cached.points.stream().filter(p -> !entry.getValue().contains(p)).toList();
@@ -221,7 +302,9 @@ public final class LoadedBlockScanner {
         final double originX, originY, originZ;
         final Nearest<Point> found = new Nearest<>(MATCHES_PER_CHUNK);
         int cursor;
-        Scan(Chunk chunk, int minY, int maxY, int x, int y, int z) {
+        final long startedAt;
+        Scan(Chunk chunk, int minY, int maxY, int x, int y, int z, long startedAt) {
+            this.startedAt=startedAt;
             this.chunk = chunk; this.minY = minY; this.maxY = maxY;
             total = 256 * (maxY - minY);
             originX = x + 0.5; originY = y + 0.5; originZ = z + 0.5;

@@ -120,11 +120,21 @@ public final class ClientGameplayTest implements FabricClientGameTest {
             });
             int firstScan = context.waitFor(client -> modules.itemEsp().loadedChunkCount()>0 && modules.itemEsp().scannedChunkCount()>=modules.itemEsp().loadedChunkCount(),2400);
             report.put("firstBlockScanTicks", firstScan);
+            report.put("sharedReadCache", context.computeOnClient(client -> modules.blockReads().stats()));
             check(context.computeOnClient(client -> modules.itemEsp().detectedCount() > 0), "production ESP finds the real test ore");
             context.runOnClient(client -> modules.diagnostics().reset()); context.waitTicks(200);
             var enabled = context.computeOnClient(client -> modules.diagnostics().snapshot()); report.put("modulesEnabled",enabled);
             check(enabled.cpuFrame().samples()>30, "benchmark records real rendered-frame samples");
             context.takeScreenshot("gameplay-" + variant + "-modules-enabled");
+            long changesBefore = context.computeOnClient(client -> modules.receivedBlockUpdates());
+            world.getServer().runCommand("setblock 8 68 10 minecraft:air");
+            context.waitFor(client -> modules.receivedBlockUpdates() > changesBefore && modules.itemEsp().detectedCount() == 0, 200);
+            check(context.computeOnClient(client -> modules.itemEsp().detectedCount() == 0), "received mining update removes an existing ESP target without a full rescan");
+            world.getServer().runCommand("setblock 8 68 10 minecraft:diamond_ore");
+            int refreshTicks = context.waitFor(client -> modules.itemEsp().detectedCount() > 0, 200);
+            report.put("receivedUpdateLatencyTicks", refreshTicks);
+            check(context.computeOnClient(client -> modules.blockReads().stats().totalHits() > 0), "enabled ESPs reuse real block reads");
+            check(context.computeOnClient(client -> modules.blockReads().stats().reads() <= SharedBlockReads.MAX_READS), "shared physical read cap holds in the running world");
             context.runOnClient(client -> { for (Module module : modules.modules()) module.setEnabled(false); });
         }
         report.put("assertions", assertions); report.put("result","passed");

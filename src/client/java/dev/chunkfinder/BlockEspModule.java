@@ -32,6 +32,10 @@ public abstract class BlockEspModule extends Module {
     private final PaletteConfig colors;
     private java.util.Map<Point, String> nearestIds = java.util.Map.of();
     private final LoadedBlockScanner scanner;
+    private SharedBlockReads sharedReads;
+    void useSharedReads(SharedBlockReads reads) { sharedReads = reads; }
+    void blockChanged(ClientLevel level, int x, int y, int z) { if (scanner.belongsTo(level)) scanner.blockChanged(x,y,z); }
+    public int pendingUpdates() { return scanner.pendingUpdates(); }
     private Set<Block> targetBlocks = Set.of();
     private List<Point> nearest = List.of();
     private String scanStatus = "Waiting for world";
@@ -109,7 +113,7 @@ public abstract class BlockEspModule extends Module {
         ClientLevel level = client.level;
         if (!supportsLevel(level)) { clear(unavailableWorldMessage()); return; }
         if (targetBlocks.isEmpty()) { clear("No available targets selected"); return; }
-        LoadedBlockScanner.World world = new BlockTargetProbe(level, level::hasChunkAt, targetBlocks, exposedOnly()) {
+        LoadedBlockScanner.World world = new BlockTargetProbe(level, level::hasChunkAt, targetBlocks, exposedOnly(), sharedReads) {
             @Override public boolean emptySection(int x, int z, int y) {
                 return loaded(x, z) && level.getChunk(x, z).getSection(level.getSectionIndex(y)).hasOnlyAir();
             }
@@ -122,7 +126,7 @@ public abstract class BlockEspModule extends Module {
         nearest = scanner.nearestMatching(world, camera.x, camera.y, camera.z, MAX_RENDERED_BLOCKS);
         // Cache target identities once per tick, never query block data while painting.
         java.util.Map<Point, String> ids = new java.util.HashMap<>();
-        for (Point p : nearest) ids.put(p, BuiltInRegistries.BLOCK.getKey(level.getBlockState(new BlockPos(p.x(), p.y(), p.z())).getBlock()).toString());
+        for (Point p : nearest) ids.put(p, BuiltInRegistries.BLOCK.getKey((sharedReads == null ? level.getBlockState(new BlockPos(p.x(), p.y(), p.z())) : sharedReads.read(new BlockPos(p.x(), p.y(), p.z()))).getBlock()).toString());
         nearestIds = java.util.Map.copyOf(ids);
         scanStatus = scanner.loadedCount() == 0 ? "Waiting for loaded chunks"
                 : scanner.pendingCount() > 0 ? (exposedOnly() ? "Exposed scan · " : "Scanning · ") + scannedChunkCount() + "/" + loadedChunkCount()

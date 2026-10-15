@@ -25,6 +25,9 @@ public final class ChunkFinderClient implements ClientModInitializer {
             "key.chunkfinder.freecam_speed", InputConstants.Type.KEYSYM, InputConstants.KEY_V, CATEGORY));
     private static ChunkFinderClient instance;
     private final ModuleManager modules = new ModuleManager();
+    public static void blockUpdated(net.minecraft.client.multiplayer.ClientLevel level, net.minecraft.core.BlockPos pos) {
+        if (instance != null) instance.modules.blockUpdated(level, pos);
+    }
     public static ModuleManager modules() {
         if (instance == null) throw new IllegalStateException("Client has not initialized");
         return instance.modules;
@@ -46,10 +49,7 @@ public final class ChunkFinderClient implements ClientModInitializer {
             }
             while (FREECAM_SPEED.consumeClick()) if (modules.freecam().isEnabled()) modules.freecam().nextSpeedPreset();
             if (modules.chunkFinder().isEnabled()) modules.chunkFinder().tick(client);
-            if (modules.ancientDebrisFinder().isEnabled()) modules.ancientDebrisFinder().tick(client);
-            if (modules.itemEsp().isEnabled()) modules.itemEsp().tick(client);
-            if (modules.storageEsp().isEnabled()) modules.storageEsp().tick(client);
-            if (modules.spawnerEsp().isEnabled()) modules.spawnerEsp().tick(client);
+            modules.tickBlocks(client);
             modules.entityEsp().tick(client);
             modules.droppedItemEsp().tick(client);
             modules.trajectories().tick(client);

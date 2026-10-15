@@ -27,10 +27,13 @@ final class DiagnosticsScreen extends Screen {
         next.add(String.format(Locale.ROOT, "CPU frame: %.2f ms median / %.2f ms p95 (%d samples)", s.cpuFrame().medianMs(), s.cpuFrame().p95Ms(), s.cpuFrame().samples()));
         next.add(String.format(Locale.ROOT, "Frame interval: %.2f ms p95 · heap %.1f / peak %.1f MiB", s.interval().p95Ms(), s.heapBytes()/1048576.0, s.peakHeapBytes()/1048576.0));
         next.add("Measurements include the current scene/UI; not a desktop FPS guarantee.");
+        var reads = modules.blockReads().stats();
+        next.add("Block reads this tick: " + reads.reads() + " · shared hits " + reads.hits() + " · cached " + reads.cached());
+        next.add("Received updates " + modules.receivedBlockUpdates() + " · pending " + modules.pendingBlockUpdates() + " · overflow resets " + modules.blockUpdateOverflows());
         next.add("Freecam terrain: " + modules.freecam().boundary());
         for (BlockEspModule module : List.of(modules.itemEsp(), modules.storageEsp(), modules.spawnerEsp(), modules.ancientDebrisFinder())) {
             next.add(module.name() + ": " + (module.isEnabled() ? "on" : "off") + " · loaded in radius " + module.loadedChunkCount()
-                    + " · scanned " + module.scannedChunkCount() + " · queued " + module.pendingChunkCount());
+                    + " · scanned " + module.scannedChunkCount() + " · queued " + module.pendingChunkCount() + " · edits " + module.pendingUpdates());
             next.add("  " + module.targetSummary() + " · " + (module.exposedOnly() ? "exposed only" : "buried included") + " · " + module.detectedCount() + " candidates");
         }
         next.add("Base clues: " + modules.chunkFinder().baseCount() + " · strict " + modules.chunkFinder().strictBaseClues());

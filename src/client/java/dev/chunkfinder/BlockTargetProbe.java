@@ -18,9 +18,13 @@ class BlockTargetProbe implements LoadedBlockScanner.World, ExposedFaces.World {
     private final boolean exposedOnly;
     private final BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
     private int reads;
+    private final SharedBlockReads shared;
 
     BlockTargetProbe(BlockGetter blocks, Predicate<BlockPos> available, Set<Block> targets, boolean exposedOnly) {
-        this.blocks = blocks; this.available = available; this.targets = targets; this.exposedOnly = exposedOnly;
+        this(blocks, available, targets, exposedOnly, null);
+    }
+    BlockTargetProbe(BlockGetter blocks, Predicate<BlockPos> available, Set<Block> targets, boolean exposedOnly, SharedBlockReads shared) {
+        this.blocks = blocks; this.available = available; this.targets = targets; this.exposedOnly = exposedOnly; this.shared = shared;
     }
     @Override public int minY() { return blocks.getMinY(); }
     @Override public int maxY() { return ScanHeight.maxYExclusive(blocks); }
@@ -35,7 +39,8 @@ class BlockTargetProbe implements LoadedBlockScanner.World, ExposedFaces.World {
         BlockState state = read(x, y, z);
         return state.isAir() || !state.getFluidState().isEmpty();
     }
-    private BlockState read(int x, int y, int z) { reads++; return blocks.getBlockState(cursor.set(x, y, z)); }
+    private BlockState read(int x, int y, int z) { reads++; return shared == null ? blocks.getBlockState(cursor.set(x, y, z)) : shared.read(cursor.set(x, y, z)); }
+    @Override public boolean canRead(int amount) { return shared == null || shared.canRead(amount); }
     @Override public int maxMatchReads() { return exposedOnly ? 7 : 1; }
     @Override public int lastMatchReads() { return reads; }
 }
