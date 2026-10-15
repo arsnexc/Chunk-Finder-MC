@@ -4,6 +4,14 @@ The separate `src/gametest` test mod uses Fabric's client game-test API to launc
 a real **Minecraft 1.21.11** client and exercise the production screens. It is
 not included in the installable Chunk Finder JAR.
 
+## Recorded result
+
+The [first passing native run](https://github.com/arsnexc/Chunk-Finder-MC/actions/runs/38694025291)
+on commit `b774d3b` completed **27 native UI assertions**, alongside **872 UI**
+and **984 module** regression assertions. It captured four native screenshots.
+The newly built 2.5.0 JAR was byte-for-byte identical to the prior 2.5.0 artifact:
+this follow-up added tests and CI support, not gameplay changes.
+
 ## Coverage
 
 - Actual custom-font glyph metrics, including the missing-glyph-box regression.

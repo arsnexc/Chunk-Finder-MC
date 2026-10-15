@@ -149,11 +149,17 @@ Optional local commands:
 MODULE_TEST_GSON_JAR=/path/to/gson-2.13.2.jar ./scripts/test-modules.sh
 ```
 
-**Not yet tested in a running Minecraft client.** After installing 2.5.0, check
-multiple ore/container/spawner selections, item and entity type filters,
-Apply/Cancel and empty selections, restart persistence, target changes during
-an active scan, stationary chunk loading/block changes, Freecam death/respawn,
-and performance at the actual render distance/GUI scale. A successful build is
-not in-game, pixel-perfect, or anti-cheat verification.
+The [native Minecraft UI smoke tests](CLIENT_UI_TESTS.md) now also pass in
+Actions: **27 assertions** exercising the actual client font, picker input,
+Apply/Cancel, empty selections, module reload persistence, resize and resource
+reload, with four native screenshots. These tests are separate from `check` and
+must pass before Actions uploads the installable JAR.
+
+**World/gameplay behavior remains unverified in a running world.** After
+installing 2.5.0, check live ore/container/spawner results, item/entity visibility,
+persistence across a full game restart, target changes during an active scan,
+stationary chunk loading/block changes, Freecam death/respawn, and performance at
+the actual render distance/GUI scale. The native UI smoke test does not establish
+pixel-perfect appearance, multiplayer compatibility or anti-cheat safety.
 
 No PR may be merged without permission.
