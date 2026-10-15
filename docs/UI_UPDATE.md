@@ -96,7 +96,7 @@ The screens do not pause the world.
 The UI bundles the unmodified Inter variable TrueType font from Google Fonts
 (`ofl/inter/Inter[opsz,wght].ttf`), copyright The Inter Project Authors, under the
 SIL Open Font License 1.1. Its license is included at
-`assets/chunkfinder/font/OFL-Inter.txt`; the mod's MIT license is unchanged.
+`assets/chunkfinder/font/ofl-inter.txt` (renamed to a resource-safe lowercase path in 2.7; license text unchanged); the mod's MIT license is unchanged.
 
 Font SHA-256:
 `29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031`

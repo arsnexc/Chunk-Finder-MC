@@ -50,6 +50,16 @@ final class PresentationRegressionTest {
             many.observe(3, y, 1, BaseClues.Family.WORK, 3, false);
         }
         check(many.results(5, true).size() == 4, "per-chunk cluster output is capped");
+        BaseClues west=new BaseClues(),east=new BaseClues();
+        west.observe(15,64,8,BaseClues.Family.SPECIAL,14,true,"beacon");
+        east.observe(16,64,8,BaseClues.Family.STORAGE,4,false,"storage");east.observe(17,64,8,BaseClues.Family.WORK,3,false,"workstation");
+        check(west.results(5,true).isEmpty()&&east.results(5,true).isEmpty(),"split evidence cannot qualify in either chunk alone");
+        BaseClues.Index index=new BaseClues.Index();index.put(0,0,west);index.put(1,0,east);
+        var joined=index.results(5,true);check(joined.size()==1,"cross-chunk evidence becomes one deduplicated clue");
+        check(joined.getFirst().blocks()==3&&joined.getFirst().explanation().contains("beacon")&&joined.getFirst().explanation().contains("storage"),"cross-chunk score has no double counting and explains its signals");
+        index.remove(1,0);check(index.results(5,true).isEmpty(),"unloading a contributing chunk invalidates the combined clue");
+        index.put(1,0,east);index.retain(Set.of(BaseClues.Index.key(1,0)));check(index.results(5,true).isEmpty(),"range pruning cannot leave old neighboring evidence");
+        index.clear();check(index.chunkCount()==0,"world reset clears the global evidence index");
     }
     private static void colors() {
         check(EspPalette.parse("#12ABef").orElseThrow() == 0xFF12ABEF, "RGB parsing is case-independent with opaque alpha");
@@ -87,6 +97,11 @@ final class PresentationRegressionTest {
             check(restored.minimized().equals(Set.of("world", "movement")), "minimized categories persist with valid IDs");
             check(restored.contrast() && restored.reducedMotion() && restored.menuScale() == 125, "accessibility preferences survive reload");
             check(restored.hudScale() == 140 && restored.lines() == 10, "HUD scale and rows are bounded");
+            ui.hudPosition(1000,500);ui.hudOpacity(45);ui.hideZeroRows(true);ui.rowVisible("blocks",false);ui.rowPinned("storage",true);ui.toggleFavorite("blocks/colors");ui.panelOrder(java.util.List.of("render","world","movement","player"));
+            InterfaceConfig customized=new InterfaceConfig(uiFile);
+            check(customized.hudX()==1000&&customized.hudY()==500&&customized.hudOpacity()==45&&customized.hideZeroRows(),"HUD position/opacity/hide-zero persist");
+            check(customized.hiddenHud().contains("blocks")&&customized.pinnedHud().contains("storage"),"HUD row visibility and pins persist separately");
+            check(customized.favorites().contains("blocks/colors")&&customized.panelOrder().getFirst().equals("render"),"favorites and snapped panel positions persist");
             Path paletteFile = directory.resolve("palette.json"); PaletteConfig palette = new PaletteConfig(paletteFile, 0xFFAAAAAA);
             palette.apply(palette.snapshot()); check(!Files.exists(paletteFile), "unchanged color Apply causes no write");
             palette.apply(new EspPalette.Snapshot(0xFF00FF00, Map.of("minecraft:diamond_ore", 0xFF0000FF, "missing:ore", 0xFF010203)));

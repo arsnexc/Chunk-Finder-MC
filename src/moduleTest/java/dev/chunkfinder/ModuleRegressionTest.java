@@ -39,6 +39,7 @@ public final class ModuleRegressionTest {
         assertions += PresentationRegressionTest.run();
         assertions += ReliabilityRegressionTest.run();
         assertions += TargetPolicyRegressionTest.run();
+        assertions += ProfilePaletteRegressionTest.run();
         System.out.println("Module regression tests passed (" + assertions + " assertions).");
         System.out.println("Uses fake loaded-world access; not an in-game rendering or anti-cheat test.");
     }

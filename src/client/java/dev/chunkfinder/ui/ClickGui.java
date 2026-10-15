@@ -32,11 +32,13 @@ public final class ClickGui {
     static final int PADDING = 6;
 
     private final List<Category> categories;
+    private final List<Category> originalCategories;
+    private java.util.function.Consumer<List<String>> orderChanges=ignored->{};
     private final Runnable close;
     private final Set<String> expanded = new HashSet<>();
     private final Set<String> minimized = new HashSet<>();
     private java.util.function.Consumer<Set<String>> panelChanges = ignored -> { };
-    private Runnable preferences;
+    private Runnable preferences, search;
     private boolean reducedMotion = true, highContrast, hints = true;
     private final UiMotion motion = new UiMotion();
     private long frameTime;
@@ -44,11 +46,33 @@ public final class ClickGui {
     public void presentation(boolean reduced, boolean contrast, boolean tooltips) {
         reducedMotion = reduced; highContrast = contrast; hints = tooltips;
     }
+    public MenuSearch searchIndex(){return new MenuSearch(originalCategories);}
+    public void search(Runnable callback){search=callback;}
+    public boolean openSearch(){if(search==null)return false;cancelDrag();search.run();return true;}
+    public void reveal(String module,String setting){
+        for(Category category:categories)for(Entry entry:category.entries())if(entry.id().equals(module)){
+            if(minimized.remove(category.id()))panelChanges.accept(Set.copyOf(minimized));
+            if(setting!=null)expanded.add(module);focus=new Focus(module,setting);keyboardFocus=true;cancelDrag();ensureFocusVisible();return;
+        }
+    }
     public void preferences(Runnable callback) { preferences = callback; }
     public void restorePanels(Set<String> ids, java.util.function.Consumer<Set<String>> changed) {
         minimized.clear();
         for (Category category : categories) if (ids.contains(category.id())) minimized.add(category.id());
         panelChanges = changed; cancelDrag();
+    }
+    public List<String> panelOrder(){return categories.stream().map(Category::id).toList();}
+    public void restoreOrder(List<String> ids,java.util.function.Consumer<List<String>> changed){
+        var remaining=new java.util.LinkedHashMap<String,Category>();for(Category c:originalCategories)remaining.put(c.id(),c);
+        List<Category> ordered=new ArrayList<>();for(String id:ids){Category c=remaining.remove(id);if(c!=null)ordered.add(c);}ordered.addAll(remaining.values());
+        if(!ordered.equals(categories)){categories.clear();categories.addAll(ordered);cancelDrag();}
+        orderChanges=changed;
+    }
+    private void reorder(String id,int index){
+        Category selected=categories.stream().filter(c->c.id().equals(id)).findFirst().orElse(null);if(selected==null)return;
+        int before=categories.indexOf(selected),next=clamp(index,0,categories.size()-1);
+        if(before!=next){categories.remove(before);categories.add(next,selected);orderChanges.accept(panelOrder());}
+        focus=new Focus("@panel:"+id,null);ensureFocusVisible();
     }
     public Rect headerBounds(String id) {
         return frame().panels().stream().filter(p -> p.category().id().equals(id)).map(Panel::header).findFirst().orElse(new Rect(0, 0, 0, 0));
@@ -64,11 +88,12 @@ public final class ClickGui {
     public String focusedLabel() {
         if (focus == null) return "Tab to navigate; category headers minimize panels";
         for (FocusBox box : focusBoxes(frame())) if (box.focus.equals(focus)) {
+            if (focus.entryId.equals("@search")) return "Find modules, settings and favorites";
             if (focus.entryId.equals("@preferences")) return "Interface and accessibility settings";
-            if (box.entry == null) return box.panel.category.label() + " panel, " + (minimized.contains(box.panel.category.id()) ? "minimized" : "expanded");
+            if (box.entry == null) return box.panel.category.label() + " panel " + (categories.indexOf(box.panel.category)+1) + " of " + categories.size() + ", " + (minimized.contains(box.panel.category.id()) ? "minimized" : "expanded");
             if (box.setting instanceof Toggle t) return t.label() + ", " + (t.enabled().getAsBoolean() ? "on" : "off");
             if (box.setting instanceof Slider v) return v.label() + ", " + v.displayValue();
-            return box.setting != null ? box.setting.label() : box.entry.label() + ", " + (box.entry.enabled().getAsBoolean() ? "on" : "off");
+            return box.setting != null ? box.setting.label() : box.entry.label() + (box.entry.action() ? ". " + box.entry.hint() : ", " + (box.entry.enabled().getAsBoolean() ? "on" : "off"));
         }
         return "Modules";
     }
@@ -84,7 +109,8 @@ public final class ClickGui {
     private long noticeUntil;
 
     public ClickGui(List<Category> categories, Runnable close) {
-        this.categories = List.copyOf(categories);
+        originalCategories=List.copyOf(categories);
+        this.categories = new ArrayList<>(categories);
         this.close = close;
         Set<String> ids = new HashSet<>();
         Set<String> categoryIds = new HashSet<>();
@@ -106,6 +132,7 @@ public final class ClickGui {
         this.width = Math.max(1, width);
         this.height = Math.max(1, height);
         frame(); // Clamp offsets after a GUI-scale/window-size change.
+        if(focus!=null)ensureFocusVisible();
     }
 
     public void notice(String message) {
@@ -119,7 +146,7 @@ public final class ClickGui {
         Frame frame = frame();
         frameTime = System.nanoTime();
         if (highContrast) canvas = contrastCanvas(canvas);
-        text(canvas, "CHUNK FINDER", frame.titleX(), frame.titleY(), 120, MUTED);
+        text(canvas, "CHUNK FINDER", frame.titleX(), frame.titleY(), search==null?120:Math.max(20,frame.search().x()-frame.titleX()-6), MUTED);
         Rect closeBounds = frame.close();
         if (closeBounds.contains(mouseX, mouseY)) rounded(canvas, closeBounds, 4, ROW_HOVER);
         centered(canvas, "×", closeBounds, MUTED);
@@ -129,8 +156,16 @@ public final class ClickGui {
                     frame.preferences().contains(mouseX, mouseY) ? ROW_HOVER : ROW);
             centered(canvas, "UI / HUD", frame.preferences(), TEXT);
         }
+        if(search!=null){
+            outlined(canvas,frame.search(),4,keyboardFocus && new Focus("@search",null).equals(focus)?TEXT:BORDER,frame.search().contains(mouseX,mouseY)?ROW_HOVER:ROW);
+            centered(canvas,"Find",frame.search(),TEXT);
+        }
         canvas.pushClip(frame.viewport());
         for (Panel panel : frame.panels()) drawPanel(canvas, panel, mouseX, mouseY);
+        if(drag instanceof PanelDrag panelDrag && panelDrag.moved()) {
+            Rect slot=frame.panels().get(panelDrag.target()).header();
+            outlined(canvas,new Rect(slot.x()-2,slot.y()-2,slot.width()+4,slot.height()+4),9,TEXT,0x20202020);
+        }
         canvas.popClip();
 
         if (frame.maxHorizontalScroll() > 0) {
@@ -140,6 +175,7 @@ public final class ClickGui {
         }
         String hint = hints ? hintAt(frame, mouseX, mouseY) : "";
         if (keyboardFocus) hint = focusedLabel();
+        if(drag instanceof PanelDrag panelDrag && panelDrag.moved())hint="Release to snap column · Esc cancels · Shift+Left/Right reorders a focused header";
         if (System.nanoTime() < noticeUntil) hint = notice;
         if (hint.isEmpty()) hint = "Click toggle · Right-click settings · Header minimize · Tab navigate · Esc close";
         if (frame.maxHorizontalScroll() > 0 && hintAt(frame, mouseX, mouseY).isEmpty()
@@ -185,7 +221,8 @@ public final class ClickGui {
                 chevron(canvas, header.x() + 5, header.y() + 10, isExpanded, hovered ? TEXT : QUIET);
             text(canvas, entry.entry().label(), header.x() + 15, header.y() + 7,
                     header.width() - 42, enabled ? TEXT : hovered || isExpanded ? 0xFFC5C5C5 : MUTED);
-            toggle(canvas, entry.pill(), motion.value("module:" + entry.entry().id(), enabled, frameTime, reducedMotion));
+            if(entry.entry().action())chevron(canvas,entry.pill().x()+6,entry.pill().y()+3,false,MUTED);
+            else toggle(canvas, entry.pill(), motion.value("module:" + entry.entry().id(), enabled, frameTime, reducedMotion));
             for (SettingBox setting : entry.settings()) drawSetting(canvas, entry.entry(), setting, panel.clip(), mouseX, mouseY);
         }
         canvas.popClip();
@@ -239,10 +276,16 @@ public final class ClickGui {
             mouseDragged(x, y, button);
             return true;
         }
+        if(button==0 && search!=null && frame.search().contains(x,y)){openSearch();return true;}
         if (button == 0 && preferences != null && frame.preferences().contains(x, y)) { preferences.run(); return true; }
         if (!frame.viewport().contains(x, y)) return false;
         for (Panel panel : frame.panels()) {
-            if (panel.header().contains(x, y)) { minimize(panel.category().id(), !minimized.contains(panel.category().id())); return true; }
+            if (panel.header().contains(x, y)) {
+                focus=new Focus("@panel:"+panel.category().id(),null);
+                if(button==1)minimize(panel.category().id(),!minimized.contains(panel.category().id()));
+                else drag=new PanelDrag(panel.category().id(),x,y,categories.indexOf(panel.category()),false);
+                return true;
+            }
             if (button == 0 && panel.maxScroll() > 0
                     && new Rect(panel.scrollTrack().x() - 2, panel.scrollTrack().y(), 6,
                     panel.scrollTrack().height()).contains(x, y)) {
@@ -280,7 +323,18 @@ public final class ClickGui {
 
     public boolean mouseDragged(double x, double y, int button) {
         if (button != 0 || drag == null) return false;
-        if (drag instanceof SliderDrag slider) {
+        if(drag instanceof PanelDrag panelDrag){
+            boolean moved=panelDrag.moved() || Math.hypot(x-panelDrag.startX(),y-panelDrag.startY())>4;
+            Frame frame=frame();
+            if(moved && frame.maxHorizontalScroll()>0){
+                if(x<frame.viewport().x()+10)horizontalScroll=clamp(horizontalScroll-12,0,frame.maxHorizontalScroll());
+                else if(x>frame.viewport().right()-10)horizontalScroll=clamp(horizontalScroll+12,0,frame.maxHorizontalScroll());
+                frame=frame();
+            }
+            Rect first=frame.panels().getFirst().header();
+            int slot=clamp((int)Math.round((x-first.x()-first.width()/2.0)/(first.width()+PANEL_GAP)),0,categories.size()-1);
+            drag=new PanelDrag(panelDrag.id(),panelDrag.startX(),panelDrag.startY(),slot,moved);
+        } else if (drag instanceof SliderDrag slider) {
             slider.setting().set(UiGeometry.sliderValue(x, slider.track(), slider.setting().min(), slider.setting().max()));
         } else if (drag instanceof ScrollDrag vertical) {
             scroll.put(vertical.category(), UiGeometry.scrollFromThumb(y, vertical.grabOffset(),
@@ -295,7 +349,8 @@ public final class ClickGui {
 
     public boolean mouseReleased(int button) {
         if (button != 0 || drag == null) return false;
-        cancelDrag();
+        Drag released=drag;cancelDrag();
+        if(released instanceof PanelDrag panel){if(panel.moved())reorder(panel.id(),panel.target());else minimize(panel.id(),!minimized.contains(panel.id()));}
         return true;
     }
 
@@ -324,6 +379,7 @@ public final class ClickGui {
 
     /** GLFW key numbers are passed by the Minecraft adapter; this core has no GLFW dependency. */
     public boolean keyPressed(int key, boolean shift) {
+        if(key==256 && drag!=null){cancelDrag();return true;}
         if (key == 258 || key == 264 || key == 265) { // Tab / down / up
             cancelDrag();
             moveFocus(key == 265 || key == 258 && shift ? -1 : 1);
@@ -335,12 +391,15 @@ public final class ClickGui {
         boolean activate = key == 257 || key == 335 || key == 32; // Enter / keypad Enter / Space
         keyboardFocus = true;
         if (focused.entry() == null) {
-            if (focused.focus().entryId.equals("@preferences")) {
+            if(focused.focus().entryId.equals("@search")) {if(activate)openSearch();else return false;}
+            else if (focused.focus().entryId.equals("@preferences")) {
                 if (activate && preferences != null) preferences.run(); else return false;
             } else {
                 String id = focused.panel().category().id();
                 if (activate) minimize(id, !minimized.contains(id));
-                else if (key == 263 || key == 262) minimize(id, key == 263);
+                else if (key == 263 || key == 262) {
+                    if(shift)reorder(id,panelOrder().indexOf(id)+(key==263?-1:1));else minimize(id,key==263);
+                }
                 else return false;
             }
         } else if (focused.setting() instanceof Slider slider) {
@@ -375,7 +434,7 @@ public final class ClickGui {
         Frame frame = frame();
         for (FocusBox box : focusBoxes(frame)) {
             if (!box.focus().equals(focus)) continue;
-            if (box.focus().entryId.equals("@preferences")) return;
+            if (box.focus().entryId.equals("@preferences") || box.focus().entryId.equals("@search")) return;
             Panel panel = box.panel();
             double nextScroll = panel.scroll();
             if (box.entry() != null && box.bounds().y() < panel.clip().y()) nextScroll -= panel.clip().y() - box.bounds().y();
@@ -398,6 +457,7 @@ public final class ClickGui {
                     result.add(new FocusBox(new Focus(entry.entry().id(), setting.setting().id()), panel, entry.entry(), setting.setting(), setting.bounds()));
             }
         }
+        if(search!=null && !frame.panels().isEmpty())result.add(new FocusBox(new Focus("@search",null),frame.panels().getFirst(),null,null,frame.search()));
         if (preferences != null && !frame.panels().isEmpty()) result.add(new FocusBox(new Focus("@preferences", null),
                 frame.panels().getFirst(), null, null, frame.preferences()));
         return result;
@@ -413,7 +473,7 @@ public final class ClickGui {
     private String hintAt(Frame frame, double x, double y) {
         if (!frame.viewport().contains(x, y)) return "";
         for (Panel panel : frame.panels()) {
-            if (panel.header().contains(x, y)) return "Click to minimize/restore " + panel.category().label() + " · Tab + Enter works too";
+            if (panel.header().contains(x, y)) return "Click minimize · Drag reorder · Shift+arrows reorder · " + panel.category().label();
             if (!panel.clip().contains(x, y)) continue;
             for (EntryBox entry : panel.entries()) {
                 if (entry.header().contains(x, y)) return entry.entry().hint();
@@ -487,7 +547,8 @@ public final class ClickGui {
         Rect horizontalThumb = new Rect(thumb.y(), horizontalTrack.y(), thumb.height(), horizontalTrack.height());
         return new Frame(viewport, List.copyOf(panels), maxHorizontal, horizontalTrack, horizontalThumb,
                 baseX, top - 18, new Rect(baseX + Math.min(totalWidth, available) - 15, top - 21, 15, 15),
-                new Rect(baseX + Math.min(totalWidth, available) - 81, top - 21, 60, 15));
+                new Rect(baseX + Math.min(totalWidth, available) - 81, top - 21, 60, 15),
+                new Rect(baseX + Math.min(totalWidth, available) - 123, top - 21, 36, 15));
     }
 
     private static UiCanvas contrastCanvas(UiCanvas delegate) {
@@ -501,14 +562,15 @@ public final class ClickGui {
     }
 
     record Frame(Rect viewport, List<Panel> panels, int maxHorizontalScroll, Rect horizontalTrack,
-                 Rect horizontalThumb, int titleX, int titleY, Rect close, Rect preferences) { }
+                 Rect horizontalThumb, int titleX, int titleY, Rect close, Rect preferences, Rect search) { }
     record Panel(Category category, Rect header, Rect body, Rect clip, int contentHeight, double scroll,
                  int maxScroll, Rect scrollTrack, Rect scrollThumb, List<EntryBox> entries) { }
     record EntryBox(Entry entry, Rect bounds, Rect header, Rect expander, Rect pill, List<SettingBox> settings) { }
     record SettingBox(Setting setting, Rect bounds, Rect sliderTrack, Rect sliderHitBox) { }
     private record Focus(String entryId, String settingId) { }
     private record FocusBox(Focus focus, Panel panel, Entry entry, Setting setting, Rect bounds) { }
-    private sealed interface Drag permits SliderDrag, ScrollDrag, HorizontalDrag { }
+    private sealed interface Drag permits SliderDrag, ScrollDrag, HorizontalDrag, PanelDrag { }
+    private record PanelDrag(String id,double startX,double startY,int target,boolean moved) implements Drag { }
     private record SliderDrag(Slider setting, Rect track) implements Drag { }
     private record ScrollDrag(String category, Rect track, int thumbSize, int max, double grabOffset) implements Drag { }
     private record HorizontalDrag(Rect track, int thumbSize, int max, double grabOffset) implements Drag { }

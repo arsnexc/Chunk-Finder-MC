@@ -52,6 +52,7 @@ abstract class MenuScreen extends Screen {
         return gui.mouseScrolled(x / scale(), y / scale(), horizontal, vertical) || super.mouseScrolled(x, y, horizontal, vertical);
     }
     @Override public boolean keyPressed(KeyEvent event) {
+        if(event.key()==70 && (event.modifiers() & (2|8))!=0 && gui.openSearch())return true;
         boolean used = gui.keyPressed(event.key(), (event.modifiers() & 1) != 0);
         if (used && Minecraft.getInstance().screen == this) triggerImmediateNarration(false);
         return used || super.keyPressed(event);

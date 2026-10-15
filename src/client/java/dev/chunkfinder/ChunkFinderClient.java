@@ -37,7 +37,7 @@ public final class ChunkFinderClient implements ClientModInitializer {
     public void onInitializeClient() {
         instance = this;
         ServerAuthorization.register();
-        ClientTickEvents.START_CLIENT_TICK.register(modules.freecam()::beginTick);
+        ClientTickEvents.START_CLIENT_TICK.register(client -> modules.freecam().beginTick(client));
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (OPEN_MODULES.consumeClick()) {
                 if (client.screen == null) client.setScreen(new ModuleSettingsScreen(modules));
@@ -48,8 +48,8 @@ public final class ChunkFinderClient implements ClientModInitializer {
                 }
             }
             while (FREECAM_SPEED.consumeClick()) if (modules.freecam().isEnabled()) modules.freecam().nextSpeedPreset();
-            if (modules.chunkFinder().isEnabled()) modules.chunkFinder().tick(client);
             modules.tickBlocks(client);
+            if (modules.chunkFinder().isEnabled()) modules.chunkFinder().tick(client);
             modules.entityEsp().tick(client);
             modules.droppedItemEsp().tick(client);
             modules.trajectories().tick(client);
@@ -58,14 +58,14 @@ public final class ChunkFinderClient implements ClientModInitializer {
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "compact_hud"),
                 (graphics, deltaTracker) -> modules.renderHud(Minecraft.getInstance(), graphics));
         WorldRenderEvents.END_MAIN.register(context -> modules.diagnostics().record(Minecraft.getInstance()));
-        WorldRenderEvents.BEFORE_DEBUG_RENDER.register(modules.chunkFinder()::renderWorld);
-        WorldRenderEvents.BEFORE_DEBUG_RENDER.register(modules.ancientDebrisFinder()::renderWorld);
-        WorldRenderEvents.BEFORE_DEBUG_RENDER.register(modules.itemEsp()::renderWorld);
-        WorldRenderEvents.BEFORE_DEBUG_RENDER.register(modules.storageEsp()::renderWorld);
-        WorldRenderEvents.BEFORE_DEBUG_RENDER.register(modules.spawnerEsp()::renderWorld);
-        WorldRenderEvents.BEFORE_DEBUG_RENDER.register(modules.entityEsp()::renderWorld);
-        WorldRenderEvents.BEFORE_DEBUG_RENDER.register(modules.droppedItemEsp()::renderWorld);
-        WorldRenderEvents.BEFORE_DEBUG_RENDER.register(modules.trajectories()::renderWorld);
-        WorldRenderEvents.BEFORE_DEBUG_RENDER.register(modules.targetRenderer()::renderWorld);
+        WorldRenderEvents.BEFORE_DEBUG_RENDER.register(context -> modules.chunkFinder().renderWorld(context));
+        WorldRenderEvents.BEFORE_DEBUG_RENDER.register(context -> modules.ancientDebrisFinder().renderWorld(context));
+        WorldRenderEvents.BEFORE_DEBUG_RENDER.register(context -> modules.itemEsp().renderWorld(context));
+        WorldRenderEvents.BEFORE_DEBUG_RENDER.register(context -> modules.storageEsp().renderWorld(context));
+        WorldRenderEvents.BEFORE_DEBUG_RENDER.register(context -> modules.spawnerEsp().renderWorld(context));
+        WorldRenderEvents.BEFORE_DEBUG_RENDER.register(context -> modules.entityEsp().renderWorld(context));
+        WorldRenderEvents.BEFORE_DEBUG_RENDER.register(context -> modules.droppedItemEsp().renderWorld(context));
+        WorldRenderEvents.BEFORE_DEBUG_RENDER.register(context -> modules.trajectories().renderWorld(context));
+        WorldRenderEvents.BEFORE_DEBUG_RENDER.register(context -> modules.targetRenderer().renderWorld(context));
     }
 }

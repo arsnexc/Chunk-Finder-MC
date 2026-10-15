@@ -14,6 +14,10 @@ final class InterfaceSettingsScreen extends MenuScreen {
         gui = new ClickGui(List.of(
             new Category("hud", "HUD", Icon.RENDER, List.of(new Entry("hud-controls", "Compact HUD", "Only Chunk Finder overlays are affected", settings::hud, () -> settings.hud(!settings.hud()), List.of(
                 new Toggle("background", "Backgrounds", "Off by default; text shadows provide contrast", settings::backgrounds, () -> settings.backgrounds(!settings.backgrounds())),
+                new Slider("opacity","Background alpha","Used only when backgrounds are enabled",settings::hudOpacity,0,90,settings::hudOpacity,n->n+"%"),
+                new Toggle("zeros","Hide zero rows","Pinned rows remain; terrain warnings stay visible when HUD is on",settings::hideZeroRows,()->settings.hideZeroRows(!settings.hideZeroRows())),
+                new Action("position","Drag HUD / anchors","Preview placement; Save or Cancel explicitly",null,()->net.minecraft.client.Minecraft.getInstance().setScreen(new HudEditorScreen(this,modules))),
+                new Action("rows","Rows and pins","Per-module HUD visibility without changing module state",null,()->net.minecraft.client.Minecraft.getInstance().setScreen(new HudRowsScreen(this,modules))),
                 new Toggle("details", "Extra details", "Add short status/coordinate lines", settings::details, () -> settings.details(!settings.details())),
                 new Slider("lines", "Visible rows", "Overflow becomes one +more line", settings::lines, 2, 10, settings::lines, Integer::toString),
                 new Slider("scale", "HUD size", "Independent of Minecraft's chat and scoreboard", settings::hudScale, 60, 140, settings::hudScale, n -> n + "%")
@@ -22,8 +26,9 @@ final class InterfaceSettingsScreen extends MenuScreen {
                 new Toggle("reduced", "Reduced motion", "Disable hover and toggle animation", settings::reducedMotion, () -> settings.reducedMotion(!settings.reducedMotion())),
                 new Toggle("hints", "Tooltips", "Show contextual hover help; keyboard focus is always labelled", settings::hints, () -> settings.hints(!settings.hints())),
                 new Action("zoom", "Menu zoom", "Cycle zoom; fitted to small windows. Pickers keep native text metrics", () -> settings.menuScale() + "%", () -> settings.menuScale(settings.menuScale() < 100 ? 100 : settings.menuScale() < 125 ? 125 : settings.menuScale() < 150 ? 150 : 75)),
+                new Action("profiles", "Profiles / backups", "Local snapshots, preview, backup, apply and restore defaults", null, () -> net.minecraft.client.Minecraft.getInstance().setScreen(new ProfilesScreen(this,modules,false))),
                 new Action("diagnostics", "Diagnostics", "Version, renderer, loaded chunks, queues, filters and measured frame times", null, () -> net.minecraft.client.Minecraft.getInstance().setScreen(new DiagnosticsScreen(this, modules))),
-                new Action("panels", "Restore all panels", "Reopen every module category without enabling modules", null, () -> settings.minimized(java.util.Set.of()))
+                new Action("panels", "Reset panel layout", "Restore default snapped order and expanded panels; module states stay unchanged", null, () -> { settings.minimized(java.util.Set.of());settings.panelOrder(java.util.List.of());net.minecraft.client.Minecraft.getInstance().setScreen(new ModuleSettingsScreen(modules)); })
             ))))
         ), this::onClose);
     }

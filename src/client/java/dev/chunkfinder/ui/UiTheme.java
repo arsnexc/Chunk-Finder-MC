@@ -112,10 +112,10 @@ public final class UiTheme {
         if (canvas.textWidth(text) <= width) return text;
         String ellipsis = "…";
         if (canvas.textWidth(ellipsis) > width) return "";
-        int end = text.length();
-        while (end > 0 && canvas.textWidth(text.substring(0, end) + ellipsis) > width)
-            end = text.offsetByCodePoints(end, -1);
-        return text.substring(0, end) + ellipsis;
+        int low=0,high=Math.min(4096,text.codePointCount(0,text.length()));
+        while(low<high){int middle=(low+high+1)/2;int end=text.offsetByCodePoints(0,middle);
+            if(canvas.textWidth(text.substring(0,end)+ellipsis)<=width)low=middle;else high=middle-1;}
+        return text.substring(0,text.offsetByCodePoints(0,low))+ellipsis;
     }
 
     public static void text(UiCanvas canvas, String text, int x, int y, int width, int color) {

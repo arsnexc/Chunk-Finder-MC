@@ -32,10 +32,12 @@ public final class ModuleSettingsScreen extends MenuScreen {
                 new Category("player", "Player", Icon.PLAYER, List.of(
                         entry("target", modules.targetRenderer()), entry("trajectories", modules.trajectories())))
         ), this::onClose);
+        gui.search(() -> Minecraft.getInstance().setScreen(new ModuleSearchScreen(this,gui,preferences)));
         gui.preferences(() -> Minecraft.getInstance().setScreen(new InterfaceSettingsScreen(this, modules)));
     }
 
     @Override protected void init() {
+        gui.restoreOrder(preferences.panelOrder(),preferences::panelOrder);
         gui.restorePanels(preferences.minimized(), preferences::minimized);
         super.init();
     }
@@ -73,7 +75,9 @@ public final class ModuleSettingsScreen extends MenuScreen {
             list.add(new Action("colors", "Outline colors", "Separate colors for base clues and natural geodes", null,
                     () -> Minecraft.getInstance().setScreen(new EspColorScreen(this, "Base Finder", chunk.colors(),
                             List.of(new dev.chunkfinder.core.TargetSelection.Entry("chunkfinder:base_clue", "Base clues"),
-                                    new dev.chunkfinder.core.TargetSelection.Entry("chunkfinder:geode", "Amethyst geodes")), chunk::automaticColor))));
+                                    new dev.chunkfinder.core.TargetSelection.Entry("chunkfinder:geode", "Amethyst geodes")), chunk::automaticColor, java.util.Set.of("chunkfinder:base_clue","chunkfinder:geode")))));
+            list.add(new Action("review", "Review base clues", "Why an area was flagged; ignore/restore individual clue areas for this world session", null,
+                    () -> Minecraft.getInstance().setScreen(new BaseClueReviewScreen(this,chunk,preferences))));
             list.add(rescan(chunk::requestRescan));
         } else if (module instanceof BlockEspModule esp) {
             if (!(esp instanceof AncientDebrisFinderModule)) {
@@ -88,7 +92,7 @@ public final class ModuleSettingsScreen extends MenuScreen {
             list.add(new Action("rules", "Target rules", "Per-target priority, distance and visible limits", () -> esp.policies().snapshot().targets().size() + " overrides",
                     () -> Minecraft.getInstance().setScreen(new TargetRulesScreen(this,esp.name(),preferences,esp.targetChoices(),esp.policies().snapshot(),esp::setPolicies))));
             list.add(new Action("colors", "ESP colors", "Module color and per-block overrides; does not change target selection", null,
-                    () -> Minecraft.getInstance().setScreen(new EspColorScreen(this, esp.name(), esp.colors(), esp.targetChoices(), id -> esp.colors().fallback()))));
+                    () -> Minecraft.getInstance().setScreen(new EspColorScreen(this, esp.name(), esp.colors(), esp.targetChoices(), id -> esp.colors().fallback(), esp.targetIds()))));
             list.add(radius(esp::searchRadius, esp::setSearchRadius));
             list.add(toggle("traces", "Trace lines", "Connect your view to detected blocks", esp::tracesEnabled,
                     () -> esp.setTracesEnabled(!esp.tracesEnabled())));
@@ -102,7 +106,7 @@ public final class ModuleSettingsScreen extends MenuScreen {
             list.add(new Action("rules", "Target rules", "Per-type/item priority, distance and visible limits", () -> entities.policies().snapshot().targets().size() + " overrides",
                     () -> Minecraft.getInstance().setScreen(new TargetRulesScreen(this,entities.name(),preferences,entities.targetChoices(),entities.policies().snapshot(),entities::setPolicies))));
             list.add(new Action("colors", "ESP colors", "Module color and per-type/item overrides", null,
-                    () -> Minecraft.getInstance().setScreen(new EspColorScreen(this, entities.name(), entities.colors(), entities.targetChoices(), entities::automaticColor))));
+                    () -> Minecraft.getInstance().setScreen(new EspColorScreen(this, entities.name(), entities.colors(), entities.targetChoices(), entities::automaticColor, entities.targetIds()))));
             list.add(range(entities::range, 16, 128, entities::setRange));
             boolean living = entities.mode() == EntityEspModule.Mode.ENTITIES;
             list.add(toggle("option", living ? "Players" : "Stack counts",

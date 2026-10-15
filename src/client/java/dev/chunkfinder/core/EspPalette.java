@@ -38,6 +38,7 @@ public final class EspPalette {
         }
         public void reset(String id) { if (id.isEmpty()) base = null; else targets.remove(id); }
         public void resetAll() { base = null; targets.clear(); }
+        public void replace(Snapshot value){base=value.base();targets.clear();targets.putAll(value.targets());}
     }
     private EspPalette() { }
     public static OptionalInt parse(String text) {

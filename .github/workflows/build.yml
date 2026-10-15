@@ -17,6 +17,9 @@ jobs:
     name: Fabric 1.21.11 / JDK 25
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      jar-name: ${{ steps.verify.outputs.jar_name }}
+      jar-sha: ${{ steps.verify.outputs.jar_sha }}
 
     steps:
       - name: Check out source
@@ -110,6 +113,7 @@ jobs:
           retention-days: 30
 
       - name: Verify installable JAR
+        id: verify
         run: |
           python3 - <<'PY'
           import hashlib
@@ -135,13 +139,13 @@ jobs:
           assert contracts is not None, 'Native Minecraft module API contracts did not report success'
           print(f'::notice title=Minecraft module contract tests::{contracts.group(0)}')
 
-          jar = Path('build/libs/chunk-finder-2-2.7.0-rc.1.jar')
+          jar = Path('build/libs/chunk-finder-2-2.7.0-rc.2.jar')
           with zipfile.ZipFile(jar) as archive:
               assert archive.testzip() is None, 'Corrupt JAR entry'
               metadata = json.loads(archive.read('fabric.mod.json'))
               assert metadata['id'] == 'chunkfinder'
-              assert metadata['version'] == '2.7.0-rc.1'
-              assert metadata['depends']['minecraft'] == '~1.21.11'
+              assert metadata['version'] == '2.7.0-rc.2'
+              assert metadata['depends']['minecraft'] == '1.21.11'
               assert metadata['license'] == 'MIT'
               for entry in (
                   'dev/chunkfinder/ChunkFinderClient.class',
@@ -161,6 +165,15 @@ jobs:
                   'dev/chunkfinder/core/FairTargetBuffer.class',
                   'dev/chunkfinder/settings/TargetPolicyConfig.class',
                   'dev/chunkfinder/TargetRulesScreen.class',
+                  'dev/chunkfinder/ModuleSearchScreen.class',
+                  'dev/chunkfinder/ProfilesScreen.class',
+                  'dev/chunkfinder/PaletteToolsScreen.class',
+                  'dev/chunkfinder/HudEditorScreen.class',
+                  'dev/chunkfinder/HudRowsScreen.class',
+                  'dev/chunkfinder/BaseClueReviewScreen.class',
+                  'dev/chunkfinder/settings/ProfileStore.class',
+                  'dev/chunkfinder/settings/PaletteFiles.class',
+                  'dev/chunkfinder/core/PalettePresets.class',
                   'dev/chunkfinder/mixin/ClientBlockUpdatesMixin.class',
                   'dev/chunkfinder/FreecamTerrainVisibility.class',
                   'dev/chunkfinder/MenuScreen.class',
@@ -193,7 +206,7 @@ jobs:
                   'assets/chunkfinder/lang/en_us.json',
                   'assets/chunkfinder/font/ui.json',
                   'assets/chunkfinder/font/inter.ttf',
-                  'assets/chunkfinder/font/OFL-Inter.txt',
+                  'assets/chunkfinder/font/ofl-inter.txt',
                   'LICENSE_chunk-finder-2',
               ):
                   assert entry in archive.namelist(), f'Missing {entry}'
@@ -213,12 +226,13 @@ jobs:
               for test_class in ('UiRegressionTest', 'UiTestFixtures', 'UiPreview', 'AwtUiCanvas', 'UiEnhancementTest'):
                   assert not any(entry.startswith(f'dev/chunkfinder/ui/{test_class}')
                                  for entry in archive.namelist()), f'Test fixture leaked into mod: {test_class}'
-              for test_class in ('ModuleRegressionTest', 'TrajectoryRegressionTest', 'FilterSettingsRegressionTest', 'PresentationRegressionTest', 'ReliabilityRegressionTest', 'TargetPolicyRegressionTest'):
+              for test_class in ('ModuleRegressionTest', 'TrajectoryRegressionTest', 'FilterSettingsRegressionTest', 'PresentationRegressionTest', 'ReliabilityRegressionTest', 'TargetPolicyRegressionTest', 'ProfilePaletteRegressionTest'):
                   assert not any(entry.startswith(f'dev/chunkfinder/{test_class}')
                                  for entry in archive.namelist()), f'Module test fixture leaked into mod: {test_class}'
-              for test_class in ('ClientScreenSmokeTest', 'ClientModuleContractTest', 'ClientTrajectoryContractChecks', 'ClientFreecamContractChecks', 'ClientExposureContractChecks', 'ClientPresentationContractChecks', 'ClientPresentationUiChecks', 'ClientGameplayTest', 'ClientTargetPolicyChecks'):
+              for test_class in ('ClientScreenSmokeTest', 'ClientModuleContractTest', 'ClientTrajectoryContractChecks', 'ClientFreecamContractChecks', 'ClientExposureContractChecks', 'ClientPresentationContractChecks', 'ClientPresentationUiChecks', 'ClientGameplayTest', 'ClientTargetPolicyChecks', 'ClientWorkspaceUiChecks'):
                   assert not any(entry.startswith(f'dev/chunkfinder/{test_class}')
                                  for entry in archive.namelist()), f'Native client test fixture leaked into mod: {test_class}'
+              assert not any(entry.startswith(('net/caffeinemc/', 'net/irisshaders/')) for entry in archive.namelist()), 'Test renderer classes leaked into mod'
               assert 'fabric-client-gametest' not in metadata['entrypoints'], 'Test entrypoint leaked into mod'
               for entry in archive.namelist():
                   if entry.endswith('.class'):
@@ -227,11 +241,17 @@ jobs:
                       assert major <= 65, f'{entry} requires newer than Java 21'
 
           digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+          import shutil
+          candidate = Path('build/candidate'); candidate.mkdir(parents=True, exist_ok=True)
+          shutil.copy2(jar, candidate / jar.name)
+          (candidate / 'verification.json').write_text(json.dumps({'file': jar.name, 'sha256': digest, 'commit': os.environ['GITHUB_SHA'], 'version': metadata['version']}))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'jar_name={jar.name}\njar_sha={digest}\n')
           print(f'Installable JAR verified: {jar.name}\nSHA-256: {digest}')
           print(f'::notice title=Installable mod::{jar.name} | SHA-256: {digest}')
           print(f'::notice title=UI font lookup::{ttf["file"]} resolves to {font_resource}')
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-              summary.write('## Chunk Finder 2.7.0-rc.1 — work in progress\n\n')
+              summary.write('## Chunk Finder 2.7.0-rc.2 — work in progress\n\n')
               summary.write('Release candidate only. The 16-item production ledger is incomplete; separate gameplay-matrix results are required.\n\n')
               summary.write('Built for Fabric / Minecraft **1.21.11** with **JDK 25**.\n\n')
               summary.write('Command: `./gradlew --no-daemon clean build`\n\n')
@@ -241,20 +261,63 @@ jobs:
               summary.write(f'Native Minecraft module API contracts: **{contracts.group(1)} assertions passed** (synthetic blocks, no world).\n\n')
               summary.write(f'Installable JAR: `{jar.name}`\n\nSHA-256: `{digest}`\n\n')
               summary.write('Archive contents, font loading, native UI/module API contracts and Java 21 bytecode checked. '
-                            'No world/server, multiplayer, world-scanning performance or anti-cheat test was performed.\n')
+                            'This job is UI/API only. Publication additionally requires the reusable gameplay/renderer matrix; external servers, arbitrary shaders and anti-cheat are not verified.\n')
           PY
 
-      - name: Upload installable JAR
-        id: artifact
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - name: Retain candidate for required gameplay gates
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          path: build/libs/chunk-finder-2-2.7.0-rc.1.jar
+          name: candidate-not-release-${{ github.sha }}
+          path: build/candidate/
+          if-no-files-found: error
+          retention-days: 7
+
+  gameplay:
+    name: Required gameplay and renderer gates
+    needs: build
+    uses: ./.github/workflows/gameplay.yml
+    with:
+      renderers: '["vanilla","sodium","iris"]'
+
+  publish:
+    name: Publish gated installable JAR
+    needs: [build, gameplay]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the exact checked candidate
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: candidate-not-release-${{ github.sha }}
+          path: candidate
+      - name: Verify candidate identity after all gameplay gates
+        env:
+          EXPECTED_SHA: ${{ needs.build.outputs.jar-sha }}
+          EXPECTED_FILE: ${{ needs.build.outputs.jar-name }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          proof = json.loads(Path('candidate/verification.json').read_text())
+          assert proof['commit'] == os.environ['GITHUB_SHA']
+          assert proof['file'] == os.environ['EXPECTED_FILE']
+          assert proof['sha256'] == os.environ['EXPECTED_SHA']
+          jar = Path('candidate') / proof['file']
+          assert hashlib.sha256(jar.read_bytes()).hexdigest() == proof['sha256']
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('## All required build, UI, API, gameplay and renderer gates passed\n\n')
+              summary.write('Vanilla Fabric, Sodium and Iris (shaders disabled); disposable single-player world. See environment-labelled benchmark artifacts for limits.\n\n')
+              summary.write(f"JAR: `{proof['file']}`\n\nSHA-256: `{proof['sha256']}`\n")
+          PY
+      - name: Upload gated installable JAR
+        id: artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          path: candidate/${{ needs.build.outputs.jar-name }}
           archive: false
           if-no-files-found: error
           retention-days: 90
-
-      - name: Link JAR in build summary
+      - name: Link verified JAR
         env:
           ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
         run: |
-          printf '\n[Download chunk-finder-2-2.7.0-rc.1.jar](%s) (GitHub sign-in required)\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+          printf '\n[Download verified JAR](%s) (GitHub sign-in required)\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"

@@ -5,6 +5,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import dev.chunkfinder.settings.InterfaceConfig;
 import dev.chunkfinder.ui.CompactHud;
+import dev.chunkfinder.ui.HudRows;
 import net.fabricmc.loader.api.FabricLoader;
 import java.util.ArrayList;
 
@@ -22,29 +23,42 @@ public final class ModuleManager {
     public SharedBlockReads blockReads() { return blockReads; }
     private final RuntimeDiagnostics diagnostics = new RuntimeDiagnostics();
     public RuntimeDiagnostics diagnostics() { return diagnostics; }
-    private final InterfaceConfig interfaceSettings = new InterfaceConfig(FabricLoader.getInstance().getConfigDir().resolve("chunkfinder-ui.json"));
+    private InterfaceConfig interfaceSettings;
     public InterfaceConfig interfaceSettings() { return interfaceSettings; }
-    private final ChunkFinderModule chunkFinder = new ChunkFinderModule();
-    private final AncientDebrisFinderModule ancientDebrisFinder = new AncientDebrisFinderModule();
-    private final ItemEspModule itemEsp = new ItemEspModule();
-    private final StorageEspModule storageEsp = new StorageEspModule();
-    private final SpawnerEspModule spawnerEsp = new SpawnerEspModule();
-    private final EntityEspModule entityEsp = new EntityEspModule(EntityEspModule.Mode.ENTITIES);
-    private final EntityEspModule droppedItemEsp = new EntityEspModule(EntityEspModule.Mode.DROPPED_ITEMS);
-    private final TrajectoriesModule trajectories = new TrajectoriesModule();
-    private final TargetRendererModule targetRenderer = new TargetRendererModule();
-    private final FreecamModule freecam = new FreecamModule();
-    private final List<Module> modules = List.of(chunkFinder, ancientDebrisFinder, itemEsp,
-            storageEsp, spawnerEsp, entityEsp, droppedItemEsp, trajectories, targetRenderer, freecam);
+    private ChunkFinderModule chunkFinder;
+    private AncientDebrisFinderModule ancientDebrisFinder;
+    private ItemEspModule itemEsp;
+    private StorageEspModule storageEsp;
+    private SpawnerEspModule spawnerEsp;
+    private EntityEspModule entityEsp;
+    private EntityEspModule droppedItemEsp;
+    private TrajectoriesModule trajectories;
+    private TargetRendererModule targetRenderer;
+    private FreecamModule freecam;
+    private List<Module> modules;
 
-    public ModuleManager() {
-        for (BlockEspModule module : blockModules()) module.useSharedReads(blockReads);
+    public ModuleManager() { initialize(); }
+    private void initialize() {
+        var ui=new InterfaceConfig(FabricLoader.getInstance().getConfigDir().resolve("chunkfinder-ui.json"));
+        var chunks=new ChunkFinderModule();var debris=new AncientDebrisFinderModule();var blocks=new ItemEspModule();
+        var storage=new StorageEspModule();var spawners=new SpawnerEspModule();var entities=new EntityEspModule(EntityEspModule.Mode.ENTITIES);
+        var items=new EntityEspModule(EntityEspModule.Mode.DROPPED_ITEMS);var paths=new TrajectoriesModule();var target=new TargetRendererModule();var camera=new FreecamModule();
+        List<Module> next=List.of(chunks,debris,blocks,storage,spawners,entities,items,paths,target,camera);
+        for(BlockEspModule module:List.<BlockEspModule>of(blocks,storage,spawners,debris))module.useSharedReads(blockReads);
+        interfaceSettings=ui;chunkFinder=chunks;ancientDebrisFinder=debris;itemEsp=blocks;storageEsp=storage;spawnerEsp=spawners;
+        entityEsp=entities;droppedItemEsp=items;trajectories=paths;targetRenderer=target;freecam=camera;modules=next;
+    }
+    /** Call on the client thread after an explicitly confirmed profile transaction. */
+    public void reload() {
+        freecam.setEnabled(false); // Restores camera/input; does not overwrite the newly applied files.
+        updates.drain(null,0);blockReads.invalidateAll();diagnostics.reset();initialize();
     }
     public List<BlockEspModule> blockModules() { return List.of(itemEsp, storageEsp, spawnerEsp, ancientDebrisFinder); }
     public void tickBlocks(Minecraft client) {
         blockReads.begin(client.level);
         var blockModules = blockModules();
         var batch = updates.drain(client.level, 64);
+        if(chunkFinder.isEnabled()){if(batch.overflow())chunkFinder.requestRescan();else chunkFinder.blocksChanged(client.level,batch.points());}
         for (var module : blockModules) if (module.isEnabled()) {
             if (batch.overflow()) module.requestRescan();
             else for (var point : batch.points()) module.blockChanged(client.level, point.x(), point.y(), point.z());
@@ -56,30 +70,35 @@ public final class ModuleManager {
         blockTurn=(blockTurn+1)%blockModules.size();
     }
 
-    public void renderHud(Minecraft client, GuiGraphics graphics) {
-        if (!interfaceSettings.hud() || !FeatureAccess.allowed(client) || client.options.hideGui || client.screen != null) return;
-        List<CompactHud.Row> rows = new ArrayList<>();
-        if (freecam.isEnabled() && freecam.boundary() != dev.chunkfinder.core.TerrainBoundary.Status.AVAILABLE)
-            rows.add(new CompactHud.Row("Terrain", freecam.boundary() == dev.chunkfinder.core.TerrainBoundary.Status.EDGE ? "EDGE" : "UNLOADED",
-                    "Player-loaded data ends here; no chunk requests", 0xFFFFBF69));
-        if (freecam.isEnabled()) rows.add(new CompactHud.Row("Freecam", freecam.speed() + "x", freecam.hudDetails(), 0xFF8CE0BD));
-        if (chunkFinder.isEnabled()) rows.add(new CompactHud.Row(chunkFinder.strictBaseClues() ? "Base clues" : "Activity hints",
-                Long.toString(chunkFinder.baseCount()), chunkFinder.hudDetails(), chunkFinder.colors().color("chunkfinder:base_clue", 0xFFFFCE8D)));
-        if (chunkFinder.isEnabled() && chunkFinder.showGeodes()) rows.add(new CompactHud.Row("Geodes", Long.toString(chunkFinder.geodeCount()), "Natural budding-amethyst clusters", chunkFinder.colors().color("chunkfinder:geode", 0xFFB493FF)));
-        for (BlockEspModule module : List.<BlockEspModule>of(ancientDebrisFinder, itemEsp, storageEsp, spawnerEsp))
-            if (module.isEnabled()) rows.add(new CompactHud.Row(module == ancientDebrisFinder ? "Debris (unverified)" : module.name(),
-                    Integer.toString(module.detectedCount()), module.hudDetails(), module.colors().color(null)));
-        for (EntityEspModule module : List.of(entityEsp, droppedItemEsp))
-            if (module.isEnabled()) rows.add(new CompactHud.Row(module.name(), Integer.toString(module.detectedCount()), module.targetSummary(), module.colors().color(null)));
-        if (trajectories.isEnabled()) rows.add(new CompactHud.Row("Paths", Integer.toString(trajectories.visibleCount()), "Approximate client-tick preview", 0xFF80D5FF));
-        if (targetRenderer.isEnabled()) rows.add(new CompactHud.Row("Target", targetRenderer.hudLabel(client), "Current crosshair target", 0xFFFAABDF));
-        double scale = interfaceSettings.hudScale() / 100.0;
-        graphics.pose().pushMatrix();
-        try {
-            graphics.pose().scale((float) scale, (float) scale);
-            CompactHud.draw(new MinecraftUiCanvas(graphics, client.font), (int) (graphics.guiWidth() / scale), (int) (graphics.guiHeight() / scale),
-                    rows, interfaceSettings.lines(), interfaceSettings.details(), interfaceSettings.backgrounds());
-        } finally { graphics.pose().popMatrix(); }
+    public record HudDefinition(String id,String label){}
+    public static List<HudDefinition> hudDefinitions(){return List.of(new HudDefinition("freecam","Freecam"),new HudDefinition("bases","Base Finder"),new HudDefinition("geodes","Geodes"),
+            new HudDefinition("debris","Ancient Debris"),new HudDefinition("blocks","Block ESP"),new HudDefinition("storage","Storage ESP"),new HudDefinition("spawners","Spawner ESP"),
+            new HudDefinition("entities","Entity ESP"),new HudDefinition("items","Dropped Item ESP"),new HudDefinition("paths","Trajectories"),new HudDefinition("target","Target Renderer"));}
+    public List<HudRows.Item> hudItems(Minecraft client) {
+        if(!FeatureAccess.allowed(client))return List.of();
+        List<HudRows.Item> rows=new ArrayList<>();
+        if(freecam.isEnabled() && freecam.boundary()!=dev.chunkfinder.core.TerrainBoundary.Status.AVAILABLE)
+            rows.add(new HudRows.Item("terrain",new CompactHud.Row("Terrain",freecam.boundary()==dev.chunkfinder.core.TerrainBoundary.Status.EDGE?"EDGE":"UNLOADED","Player-loaded data ends here; no chunk requests",0xFFFFBF69),false,true));
+        if(freecam.isEnabled())rows.add(new HudRows.Item("freecam",new CompactHud.Row("Freecam",freecam.speed()+"x",freecam.hudDetails(),0xFF8CE0BD),false,false));
+        if(chunkFinder.isEnabled())rows.add(new HudRows.Item("bases",new CompactHud.Row(chunkFinder.strictBaseClues()?"Base clues":"Activity hints",Long.toString(chunkFinder.baseCount()),chunkFinder.hudDetails(),chunkFinder.colors().color("chunkfinder:base_clue",0xFFFFCE8D)),chunkFinder.baseCount()==0,false));
+        if(chunkFinder.isEnabled()&&chunkFinder.showGeodes())rows.add(new HudRows.Item("geodes",new CompactHud.Row("Geodes",Long.toString(chunkFinder.geodeCount()),"Natural budding-amethyst clusters",chunkFinder.colors().color("chunkfinder:geode",0xFFB493FF)),chunkFinder.geodeCount()==0,false));
+        for(BlockEspModule module:List.<BlockEspModule>of(ancientDebrisFinder,itemEsp,storageEsp,spawnerEsp))if(module.isEnabled()){
+            String id=module==ancientDebrisFinder?"debris":module==itemEsp?"blocks":module==storageEsp?"storage":"spawners";
+            rows.add(new HudRows.Item(id,new CompactHud.Row(module==ancientDebrisFinder?"Debris (unverified)":module.name(),Integer.toString(module.detectedCount()),module.hudDetails(),module.colors().color(null)),module.detectedCount()==0,false));
+        }
+        for(EntityEspModule module:List.of(entityEsp,droppedItemEsp))if(module.isEnabled())rows.add(new HudRows.Item(module==entityEsp?"entities":"items",new CompactHud.Row(module.name(),Integer.toString(module.detectedCount()),module.targetSummary(),module.colors().color(null)),module.detectedCount()==0,false));
+        if(trajectories.isEnabled())rows.add(new HudRows.Item("paths",new CompactHud.Row("Paths",Integer.toString(trajectories.visibleCount()),"Approximate client-tick preview",0xFF80D5FF),trajectories.visibleCount()==0,false));
+        if(targetRenderer.isEnabled()){String label=targetRenderer.hudLabel(client);rows.add(new HudRows.Item("target",new CompactHud.Row("Target",label,"Current crosshair target",0xFFFAABDF),label.equals("No target"),false));}
+        return List.copyOf(rows);
+    }
+    public List<CompactHud.Row> hudRows(Minecraft client){return HudRows.select(hudItems(client),interfaceSettings.hiddenHud(),interfaceSettings.pinnedHud(),interfaceSettings.hideZeroRows());}
+    public void renderHud(Minecraft client,GuiGraphics graphics){
+        if(!interfaceSettings.hud()||!FeatureAccess.allowed(client)||client.options.hideGui||client.screen!=null)return;
+        double scale=interfaceSettings.hudScale()/100.0;graphics.pose().pushMatrix();
+        try{graphics.pose().scale((float)scale,(float)scale);
+            CompactHud.draw(new MinecraftUiCanvas(graphics,client.font),(int)(graphics.guiWidth()/scale),(int)(graphics.guiHeight()/scale),hudRows(client),
+                    interfaceSettings.lines(),interfaceSettings.details(),interfaceSettings.backgrounds(),interfaceSettings.hudOpacity(),interfaceSettings.hudX(),interfaceSettings.hudY());
+        }finally{graphics.pose().popMatrix();}
     }
 
     public List<Module> modules() { return modules; }

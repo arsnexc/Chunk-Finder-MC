@@ -17,7 +17,7 @@ public final class TargetIds {
         String id = value.trim().toLowerCase(Locale.ROOT);
         if (id.isEmpty()) return null;
         if (!id.contains(":")) id = "minecraft:" + id;
-        return ID.matcher(id).matches() ? id : null;
+        return id.length() <= 512 && ID.matcher(id).matches() ? id : null;
     }
 
     public static Set<String> copy(Collection<String> values) {

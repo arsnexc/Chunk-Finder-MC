@@ -1,4 +1,4 @@
-> **Work in progress: 2.7.0-rc.1.** The requested 16-item production roadmap is being implemented and validated in stages. See [the evidence ledger](docs/PRODUCTION_ROADMAP.md). Do not interpret an RC/UI-only build as completion of the full roadmap.
+> **Work in progress: 2.7.0-rc.2.** The requested 16-item production roadmap is being implemented and validated in stages. See [the evidence ledger](docs/PRODUCTION_ROADMAP.md). Do not interpret an RC/UI-only build as completion of the full roadmap.
 >
 > Last completed 2.6.0 build: [installable JAR](https://github.com/arsnexc/Chunk-Finder-MC/actions/runs/38709346355/artifacts/11959258921). New gameplay checks use disposable single-player worlds; no public server or user saves.
 

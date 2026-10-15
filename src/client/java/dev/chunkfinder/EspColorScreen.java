@@ -22,11 +22,12 @@ import static dev.chunkfinder.ui.UiTheme.*;
 
 /** Transactional module/per-target RGB editing. Selection and scan state are never modified. */
 final class EspColorScreen extends Screen {
-    private enum Focus { SCOPE, HEX, RED, GREEN, BLUE, RESET, RESET_ALL, CANCEL, APPLY }
+    private enum Focus { TOOLS, SCOPE, HEX, RED, GREEN, BLUE, RESET, RESET_ALL, CANCEL, APPLY }
     private final Screen parent;
     private final PaletteConfig config;
     private final EspPalette.Draft draft;
     private final List<Entry> choices;
+    private final java.util.Set<String> selected;
     private final ToIntFunction<String> automatic;
     private EditBox hex;
     private Focus focus = Focus.HEX, drag;
@@ -35,9 +36,22 @@ final class EspColorScreen extends Screen {
     private boolean syncing, valid = true;
 
     EspColorScreen(Screen parent, String label, PaletteConfig config, Collection<Entry> choices, ToIntFunction<String> automatic) {
+        this(parent,label,config,choices,automatic,java.util.Set.of());
+    }
+    EspColorScreen(Screen parent,String label,PaletteConfig config,Collection<Entry> choices,ToIntFunction<String> automatic,Collection<String> selected) {
         super(Component.literal(label + " · Colors"));
+        this.selected=dev.chunkfinder.core.TargetIds.copy(selected);
         this.parent = parent; this.config = config; this.choices = List.copyOf(choices); this.automatic = automatic;
         draft = new EspPalette.Draft(config.snapshot()); fallback = automatic.applyAsInt("");
+    }
+    EspPalette.Snapshot palette(){return draft.snapshot();}
+    java.util.Set<String> selectedTargets(){return selected;}
+    void replaceDraft(EspPalette.Snapshot palette){draft.replace(palette);sync();}
+    List<String> legend(){
+        var ids=new java.util.TreeSet<>(selected);ids.addAll(draft.snapshot().targets().keySet());List<String> lines=new java.util.ArrayList<>();
+        lines.add("Module: "+(draft.snapshot().base()==null?"automatic defaults":EspPalette.hex(draft.snapshot().base())));
+        for(String id:ids)lines.add(id+" : "+EspPalette.hex(draft.color(id,automatic.applyAsInt(id)))+(draft.custom(id)?" (override)":" (inherited)"));
+        return List.copyOf(lines);
     }
     private ColorEditorLayout layout() { return ColorEditorLayout.at(width, height); }
     private int color() { return draft.color(scope, fallback); }
@@ -73,7 +87,8 @@ final class EspColorScreen extends Screen {
     @Override public void render(GuiGraphics graphics, int x, int y, float delta) {
         UiCanvas canvas = new MinecraftUiCanvas(graphics, font); ColorEditorLayout ui = layout(); Rect panel = ui.panel();
         shadow(canvas, panel, 9); outlined(canvas, panel, 9, BORDER, PANEL);
-        text(canvas, getTitle().getString(), panel.x() + 12, panel.y() + 12, panel.width() - 24, TEXT);
+        text(canvas, getTitle().getString(), panel.x() + 12, panel.y() + 12, panel.width() - 100, TEXT);
+        button(canvas,ui.tools(),"Tools",Focus.TOOLS,true,x,y);
         text(canvas, !valid ? "Enter exactly six hex digits · #RRGGBB" : draft.changed() ? "Unsaved colors · Apply to keep" : "Colors only · target selection stays unchanged",
                 panel.x() + 12, panel.y() + 26, panel.width() - 24, valid ? MUTED : 0xFFFF9090);
         button(canvas, ui.scope(), scopeName() + "  >", Focus.SCOPE, true, x, y);
@@ -144,6 +159,11 @@ final class EspColorScreen extends Screen {
     }
     private void activate(Focus value) {
         switch (value) {
+            case TOOLS -> {
+                if(!valid){focus(Focus.HEX);return;}
+                var prefs=parent instanceof MenuScreen menu?menu.preferences:new dev.chunkfinder.settings.InterfaceConfig(net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir().resolve("chunkfinder-ui.json"));
+                Minecraft.getInstance().setScreen(new PaletteToolsScreen(this,prefs));
+            }
             case SCOPE -> {
                 if (!valid) { focus(Focus.HEX); return; }
                 focus(Focus.SCOPE);
@@ -162,7 +182,7 @@ final class EspColorScreen extends Screen {
     private static Rect track(ColorEditorLayout ui, Focus focus) { return switch (focus) { case RED -> ui.red(); case GREEN -> ui.green(); case BLUE -> ui.blue(); default -> null; }; }
     private static Rect bounds(ColorEditorLayout ui, Focus focus) {
         return switch (focus) {
-            case SCOPE -> ui.scope(); case HEX -> null;
+            case TOOLS -> ui.tools(); case SCOPE -> ui.scope(); case HEX -> null;
             case RED, GREEN, BLUE -> ColorEditorLayout.sliderHit(track(ui, focus));
             case RESET -> ui.reset(); case RESET_ALL -> ui.resetAll(); case CANCEL -> ui.cancel(); case APPLY -> ui.apply();
         };

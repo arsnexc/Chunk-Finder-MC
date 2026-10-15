@@ -15,14 +15,14 @@ heuristic player-ownership detection. No PR may be merged without permission.
 | 4 | Shared bounded block-read cache with hit/miss/read accounting and fair scheduling | Passed real read reuse/hard-cap checks at checkpoint 7ca755e; counters recorded |
 | 5 | Per-target priority, distance and display caps; common blocks cannot evict every rare target | Implemented fair bounded cache/display selection, transactional rules UI and persistence; headless tests pass; native validation pending |
 | 6 | Optional version/renderer/chunk/queue/filter diagnostics page | Implemented; native build/input validation pending |
-| 7 | Header drag reorder, saved snapped positions and reset; keyboard equivalent | Pending |
-| 8 | Module/setting/action search and saved favorites | Pending |
-| 9 | HUD drag anchors, row visibility/pins, opacity and hide-zero controls | Pending |
-| 10 | Colorblind-friendly presets, validated local import/export and legend | Pending |
-| 11 | Local profiles, explicit preview/apply, backups and rollback/default restoration | Pending |
-| 12 | Zoom/resize/focus/narration and optional-animation regression matrix | Pending |
-| 13 | Cross-chunk base evidence, deduplication and unload/dimension invalidation | Pending |
-| 14 | Human-readable evidence and reversible ignored clues | Pending |
+| 7 | Header drag reorder, saved snapped positions and reset; keyboard equivalent | Implemented saved snapped column drag/reorder, keyboard equivalent and reset; headless pass, expanded native run pending |
+| 8 | Module/setting/action search and saved favorites | Implemented reveal-only module/setting/action search and saved favorites; headless pass, native run pending |
+| 9 | HUD drag anchors, row visibility/pins, opacity and hide-zero controls | Implemented normalized draggable HUD anchors, row visibility/pins, opacity and hide-zero; headless pass, native run pending |
+| 10 | Colorblind-friendly presets, validated local import/export and legend | Implemented label-backed presets, local palette import/export, preview and legend; headless validation pass, native run pending |
+| 11 | Local profiles, explicit preview/apply, backups and rollback/default restoration | Implemented allowlisted local profiles, explicit preview, backup-before-apply, rollback/default reset and live binding reload; failure-injection/symlink/path tests pass, native/world run pending |
+| 12 | Zoom/resize/focus/narration and optional-animation regression matrix | Expanded headless all-zoom/window checks and native resize/focus/narration/palette/profile scenarios; native run pending |
+| 13 | Cross-chunk base evidence, deduplication and unload/dimension invalidation | Implemented world-aligned cross-chunk evidence index with deduplication and invalidation; headless pass, real-world scenario pending |
+| 14 | Human-readable evidence and reversible ignored clues | Implemented evidence explanations and reversible session clue-area ignores; native/world scenario pending |
 | 15 | Optional horizontal flight, acceleration/deceleration and speed presets | Implemented with legacy instant defaults; headless dynamics pass; gameplay pending |
 | 16 | Measured baseline/on frame-time, heap and first-scan latency; environment-labelled budgets | Initial three-renderer measurements recorded; provisional regression budgets added, broader workloads still needed |
 
@@ -75,3 +75,14 @@ Provisional CI regression gates now compare p95 CPU frame time/heap with the sam
 run's baseline and enforce scan/update/read limits. These are software-rendered
 CI fixture budgets, not desktop GPU FPS promises or full workload coverage.
 The remaining UI/profile/cross-chunk work is still not complete.
+
+## RC2 integration gate
+
+The remaining workspace/profile/HUD/cross-chunk implementations are now present.
+RC2 has not yet passed the expanded native/world checks. Final JAR publication
+now depends on the same-commit reusable three-renderer gameplay matrix; the
+pre-gate artifact is explicitly named `candidate-not-release-*`.
+
+The Minecraft dependency is restricted to the exact tested 1.21.11 version.
+The Inter license asset was renamed to a lowercase resource-safe path, with its
+license text and the font binary unchanged, eliminating its resource-path error.

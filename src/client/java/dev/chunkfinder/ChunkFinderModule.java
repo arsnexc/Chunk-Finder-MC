@@ -32,6 +32,27 @@ public final class ChunkFinderModule extends Module {
     public int automaticColor(String id) { return "chunkfinder:geode".equals(id) ? 0xFFB493FF : 0xFFFFCE8D; }
     private final ArrayDeque<ChunkCoord> queue = new ArrayDeque<>();
     private final Map<ChunkCoord, List<Detection>> results = new HashMap<>();
+    private final BaseClues.Index baseIndex=new BaseClues.Index();
+    private List<Detection> allDetections=List.of();
+    private final List<AABB> ignored=new ArrayList<>();
+    public record Clue(String key,String coordinates,String explanation,int score,boolean ignored){}
+    private boolean ignored(Detection clue){return clue.kind()==Kind.ACTIVITY && ignored.stream().anyMatch(box->box.intersects(clue.bounds()));}
+    public List<Clue> clues(){return allDetections.stream().filter(d->d.kind()==Kind.ACTIVITY).map(d->new Clue(d.key(),(int)Math.floor(d.x())+", "+(int)Math.floor(d.y())+", "+(int)Math.floor(d.z()),d.explanation(),d.evidence(),ignored(d))).toList();}
+    public boolean ignoreClue(String key,boolean value){
+        var clue=allDetections.stream().filter(d->d.key().equals(key)&&d.kind()==Kind.ACTIVITY).findFirst();if(clue.isEmpty())return false;
+        if(value){if(ignored.size()>=64)ignored.removeFirst();ignored.add(clue.get().bounds().inflate(1));}
+        else ignored.removeIf(box->box.intersects(clue.get().bounds()));publishDetections();return true;
+    }
+    public void clearIgnored(){ignored.clear();publishDetections();}
+    public void blocksChanged(ClientLevel level,List<dev.chunkfinder.core.LoadedBlockScanner.Point> changed){
+        if(level!=lastLevel || !isEnabled())return;java.util.Set<ChunkCoord> chunks=new java.util.HashSet<>();
+        for(var point:changed){ChunkCoord chunk=new ChunkCoord(point.x()>>4,point.z()>>4);if(ChunkRange.contains(chunk.x,chunk.z,queueX,queueZ,settings.simulationDistance()))chunks.add(chunk);}
+        boolean removed=false;
+        for(ChunkCoord chunk:chunks){if(results.remove(chunk)!=null)removed=true;baseIndex.remove(chunk.x,chunk.z);
+            if(activeScan!=null&&activeScan.chunk.equals(chunk))activeScan.dirty=true;
+            else if(LoadedChunks.at(level,chunk.x,chunk.z)){queue.remove(chunk);queue.addFirst(chunk);}}
+        if(removed)publishDetections();
+    }
     private List<Detection> renderDetections = List.of(), nearestDetections = List.of();
     private int baseCount, geodeCount;
     private ClientLevel lastLevel;
@@ -85,7 +106,7 @@ public final class ChunkFinderModule extends Module {
 
     public void tick(Minecraft client) {
         if (!FeatureAccess.allowed(client)) {
-            lastLevel = null;
+            lastLevel = null; ignored.clear();
             queue.clear();
             activeScan = null;
             results.clear();
@@ -99,7 +120,7 @@ public final class ChunkFinderModule extends Module {
         tickCount++;
         if (level == null || client.player == null) return;
         if (level != lastLevel) {
-            lastLevel = level; results.clear(); queue.clear(); activeScan = null;
+            lastLevel = level; ignored.clear(); results.clear(); queue.clear(); activeScan = null;
             publishDetections();
             queueX = Integer.MIN_VALUE; queueZ = Integer.MIN_VALUE; queueDistance = -1; nextRefreshTick = 0;
         }
@@ -147,7 +168,8 @@ public final class ChunkFinderModule extends Module {
             scan.cursor += amount;
             budget -= amount;
             if (scan.cursor >= scan.total) {
-                results.put(scan.chunk, scan.detections());
+                if(scan.dirty){queue.remove(scan.chunk);queue.addFirst(scan.chunk);}
+                else {baseIndex.put(scan.chunk.x,scan.chunk.z,scan.clues);results.put(scan.chunk, scan.detections());}
                 activeScan = null;
                 publishDetections();
             } else if (amount == 0) {
@@ -181,6 +203,7 @@ public final class ChunkFinderModule extends Module {
         private final ChunkCoord chunk;
         private final int total;
         private int cursor;
+        private boolean dirty;
         private int budding;
         private long gx, gy, gz;
         private final BaseClues clues = new BaseClues();
@@ -204,26 +227,24 @@ public final class ChunkFinderModule extends Module {
                 found.add(new Detection(Kind.GEODE, (double) gx / budding, (double) gy / budding,
                         (double) gz / budding, budding,
                         new AABB(gxMin, gyMin, gzMin, gxMax + 1, gyMax + 1, gzMax + 1)));
-            for (BaseClues.Cluster cluster : clues.results(settings.sensitivity(), settings.strict()))
-                found.add(new Detection(Kind.ACTIVITY, cluster.x(), cluster.y(), cluster.z(), cluster.score(),
-                        new AABB(cluster.minX(), cluster.minY(), cluster.minZ(), cluster.maxX() + 1, cluster.maxY() + 1, cluster.maxZ() + 1)));
             return found;
         }
     }
 
     private void publishDetections() {
-        List<Detection> snapshot = new ArrayList<>();
-        for (List<Detection> chunk : results.values()) snapshot.addAll(chunk);
-        renderDetections = List.copyOf(snapshot);
-        baseCount = (int) snapshot.stream().filter(d -> d.kind() == Kind.ACTIVITY).count();
-        geodeCount = snapshot.size() - baseCount;
-        nearestDetections = List.of();
+        baseIndex.retain(results.keySet().stream().map(c->BaseClues.Index.key(c.x,c.z)).collect(java.util.stream.Collectors.toSet()));
+        List<Detection> snapshot=new ArrayList<>();for(List<Detection> chunk:results.values())snapshot.addAll(chunk);
+        for(var c:baseIndex.results(settings.sensitivity(),settings.strict()))snapshot.add(new Detection(Kind.ACTIVITY,c.x(),c.y(),c.z(),c.score(),
+                new AABB(c.minX(),c.minY(),c.minZ(),c.maxX()+1,c.maxY()+1,c.maxZ()+1),c.key(),c.explanation()));
+        allDetections=List.copyOf(snapshot);renderDetections=snapshot.stream().filter(d->!ignored(d)).toList();
+        baseCount=(int)renderDetections.stream().filter(d->d.kind()==Kind.ACTIVITY).count();geodeCount=renderDetections.size()-baseCount;nearestDetections=List.of();
     }
 
     static void observeBase(BaseClues clues, BlockState s, int x, int y, int z) {
         if (s.is(Blocks.BEACON) || s.is(Blocks.RESPAWN_ANCHOR) || s.is(Blocks.CONDUIT)
                 || s.is(Blocks.ENCHANTING_TABLE) || s.getBlock() instanceof ShulkerBoxBlock) {
-            clues.observe(x, y, z, BaseClues.Family.SPECIAL, 14, true);
+            String label=s.is(Blocks.BEACON)?"beacon":s.is(Blocks.RESPAWN_ANCHOR)?"respawn anchor":s.is(Blocks.CONDUIT)?"conduit":s.is(Blocks.ENCHANTING_TABLE)?"enchanting table":"shulker box";
+            clues.observe(x, y, z, BaseClues.Family.SPECIAL, 14, true, label);
         } else if (s.is(Blocks.CHEST) || s.is(Blocks.TRAPPED_CHEST) || s.is(Blocks.BARREL) || s.is(Blocks.ENDER_CHEST)) {
             clues.observe(x, y, z, BaseClues.Family.STORAGE, 4, false);
         } else if (s.is(Blocks.FURNACE) || s.is(Blocks.BLAST_FURNACE) || s.is(Blocks.SMOKER)
@@ -267,6 +288,8 @@ public final class ChunkFinderModule extends Module {
 
     private static long square(int n) { return (long) n * n; }
     private record ChunkCoord(int x, int z) { }
-    private record Detection(Kind kind, double x, double y, double z, int evidence, AABB bounds) { }
+    private record Detection(Kind kind,double x,double y,double z,int evidence,AABB bounds,String key,String explanation) {
+        Detection(Kind kind,double x,double y,double z,int evidence,AABB bounds){this(kind,x,y,z,evidence,bounds,"geode:"+x+":"+y+":"+z,evidence+" budding blocks (natural)");}
+    }
     private enum Kind { GEODE, ACTIVITY }
 }

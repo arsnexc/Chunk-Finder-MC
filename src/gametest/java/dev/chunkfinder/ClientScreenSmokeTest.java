@@ -122,6 +122,7 @@ public final class ClientScreenSmokeTest implements FabricClientGameTest {
         fontCheck(context);
         screenshot(context, "modules-native-after-reload");
         assertions += ClientPresentationUiChecks.run(context, screenshots::add);
+        assertions += ClientWorkspaceUiChecks.run(context, screenshots::add);
         context.setScreen(() -> new TitleScreen());
         writeReport();
         System.out.println("Minecraft UI smoke tests passed (" + assertions + " assertions).");

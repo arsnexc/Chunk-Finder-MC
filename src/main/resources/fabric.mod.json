@@ -4,18 +4,26 @@
   "version": "${version}",
   "name": "Chunk Finder 2",
   "description": "Client visuals for loaded chunks: geodes, debris, blocks, storage, spawners, entities, items, trajectories and freecam.",
-  "authors": ["Chunk Finder contributors"],
+  "authors": [
+    "Chunk Finder contributors"
+  ],
   "license": "MIT",
   "environment": "*",
-  "mixins": ["chunkfinder.client.mixins.json"],
+  "mixins": [
+    "chunkfinder.client.mixins.json"
+  ],
   "entrypoints": {
-    "main": ["dev.chunkfinder.ChunkFinderServer"],
-    "client": ["dev.chunkfinder.ChunkFinderClient"]
+    "main": [
+      "dev.chunkfinder.ChunkFinderServer"
+    ],
+    "client": [
+      "dev.chunkfinder.ChunkFinderClient"
+    ]
   },
   "depends": {
     "fabricloader": ">=0.19.5",
-    "minecraft": "~1.21.11",
+    "minecraft": "1.21.11",
     "java": ">=21",
-    "fabric-api": "*"
+    "fabric-api": ">=0.141.6"
   }
 }

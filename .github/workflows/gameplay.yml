@@ -1,6 +1,11 @@
 name: Gameplay and renderer validation
 on:
-  push:
+  workflow_call:
+    inputs:
+      renderers:
+        type: string
+        required: false
+        default: '["vanilla","sodium","iris"]'
   workflow_dispatch:
     inputs:
       renderers:

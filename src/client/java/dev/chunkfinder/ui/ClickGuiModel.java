@@ -18,7 +18,8 @@ public final class ClickGuiModel {
     }
 
     public record Entry(String id, String label, String hint, BooleanSupplier enabled, Runnable toggle,
-                        List<Setting> settings) {
+                        List<Setting> settings, boolean action) {
+        public Entry(String id,String label,String hint,BooleanSupplier enabled,Runnable toggle,List<Setting> settings){this(id,label,hint,enabled,toggle,settings,false);}
         public Entry { settings = List.copyOf(settings); }
     }
 

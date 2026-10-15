@@ -3,6 +3,7 @@ package dev.chunkfinder;
 import com.google.gson.GsonBuilder;
 import dev.chunkfinder.core.TerrainBoundary;
 import dev.chunkfinder.core.TargetPolicies;
+import dev.chunkfinder.settings.ProfileStore;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.loader.api.FabricLoader;
@@ -79,13 +80,27 @@ public final class ClientGameplayTest implements FabricClientGameTest {
             context.getInput().holdKeyFor(options -> options.keyRight, 4); context.waitTick();
             check(context.computeOnClient(client -> Math.abs(client.getCameraEntity().getX() - camera.x) < .25), "D reverses A displacement");
             check(context.computeOnClient(client -> client.player.position().distanceToSqr(body) < 1e-5), "Freecam movement does not move the actual player");
+            context.getInput().pressKey(GLFW.GLFW_KEY_V);
+            check(context.computeOnClient(client -> modules.freecam().speed()==5), "actual speed-preset binding cycles 2x to 5x");
+            context.runOnClient(client -> modules.freecam().setSpeed(2));
             context.runOnClient(client -> { modules.freecam().setHorizontalFlight(true); client.getCameraEntity().setXRot(-75); });
             double y = context.computeOnClient(client -> client.getCameraEntity().getY());
             context.getInput().holdKeyFor(options -> options.keyUp, 4); context.waitTick();
             check(context.computeOnClient(client -> Math.abs(client.getCameraEntity().getY() - y) < 1e-5), "horizontal mode remains level while looking up");
+            context.runOnClient(client -> {modules.freecam().setAcceleration(4);modules.freecam().setDeceleration(4);});
+            context.getInput().holdKeyFor(options -> options.keyLeft,8);context.waitTicks(5);
+            Vec3 settled=context.computeOnClient(client -> client.getCameraEntity().position());context.waitTicks(5);
+            check(context.computeOnClient(client -> client.getCameraEntity().position().distanceToSqr(settled)<1e-8), "configured braking reaches actual rest rather than drifting");
+            context.runOnClient(client -> {modules.freecam().setAcceleration(0);modules.freecam().setDeceleration(0);});
             context.getInput().holdKeyFor(options -> options.keyJump, 36); context.waitTicks(2);
             check(context.computeOnClient(client -> client.level.getBlockState(client.getCameraEntity().blockPosition()).is(Blocks.STONE)), "camera can enter loaded solid terrain without moving the body");
             context.takeScreenshot("gameplay-" + variant + "-underground");
+            int edgeChunk=context.computeOnClient(client -> {
+                for(int x=0;x<64;x++)if(LoadedChunks.at(client.level,x,0)&&!LoadedChunks.at(client.level,x+1,0))return x;
+                throw new AssertionError("No finite loaded edge found in the isolated fixture");
+            });
+            context.runOnClient(client -> client.getCameraEntity().setPos(edgeChunk*16+8,80,8));context.waitTicks(3);
+            check(context.computeOnClient(client -> modules.freecam().boundary()==TerrainBoundary.Status.EDGE), "approaching a real loaded boundary warns before entering missing terrain");
             context.runOnClient(client -> client.getCameraEntity().setPos(512,80,512)); context.waitTicks(3);
             check(context.computeOnClient(client -> modules.freecam().boundary() == TerrainBoundary.Status.UNAVAILABLE), "real loaded-terrain boundary produces an explicit warning");
             check(context.computeOnClient(client -> !LoadedChunks.at(client.level,new BlockPos(512,64,512)) && client.player.position().distanceToSqr(body)<1e-5), "detached camera does not request or move the body to missing chunks");
@@ -148,6 +163,32 @@ public final class ClientGameplayTest implements FabricClientGameTest {
             });
             context.waitFor(client -> modules.itemEsp().displayedCount("minecraft:diamond_ore")==1 && modules.itemEsp().displayedCount("minecraft:stone")>0,1200);
             check(context.computeOnClient(client -> modules.itemEsp().displayedCount("minecraft:stone")<=2), "real dense stone cannot crowd out a rare ore or exceed its display cap");
+            world.getServer().runCommand("setblock 9 63 9 minecraft:air");
+            world.getServer().runCommand("setblock 9 63 10 minecraft:air");
+            world.getServer().runCommand("setblock 10 63 9 minecraft:air");
+            world.getServer().runCommand("setblock 15 63 8 minecraft:beacon");
+            world.getServer().runCommand("setblock 16 63 8 minecraft:chest");
+            world.getServer().runCommand("setblock 17 63 8 minecraft:crafting_table");
+            context.waitFor(client -> client.level.getBlockState(new BlockPos(17,63,8)).is(Blocks.CRAFTING_TABLE),200);
+            context.runOnClient(client -> { modules.chunkFinder().setStrictBaseClues(true);modules.chunkFinder().requestRescan(); });
+            context.waitFor(client -> !modules.chunkFinder().clues().isEmpty(),2400);
+            String clue=context.computeOnClient(client -> modules.chunkFinder().clues().getFirst().key());
+            check(context.computeOnClient(client -> modules.chunkFinder().clues().getFirst().explanation().contains("beacon") && modules.chunkFinder().clues().getFirst().explanation().contains("storage")), "real cross-chunk clue explains its supporting blocks");
+            context.runOnClient(client -> modules.chunkFinder().ignoreClue(clue,true));
+            check(context.computeOnClient(client -> modules.chunkFinder().baseCount()==0), "individual false-positive area can be ignored without changing blocks");
+            context.runOnClient(client -> modules.chunkFinder().clearIgnored());
+            check(context.computeOnClient(client -> modules.chunkFinder().baseCount()>0), "ignored clue can be restored");
+            ProfileStore profiles=new ProfileStore(FabricLoader.getInstance().getConfigDir());
+            try {
+                var before=profiles.capture();var files=new java.util.TreeMap<>(before.files());
+                var item=com.google.gson.JsonParser.parseString(files.get("item_esp.json")).getAsJsonObject();item.addProperty("enabled",false);files.put("item_esp.json",item.toString());
+                context.getInput().pressKey(GLFW.GLFW_KEY_G);context.waitTick();
+                check(context.computeOnClient(client -> modules.freecam().isEnabled()), "profile scenario begins with a real detached camera");
+                profiles.apply(new ProfileStore.Snapshot(files));context.runOnClient(client -> modules.reload());context.waitTicks(2);
+                check(context.computeOnClient(client -> !modules.freecam().isEnabled() && client.getCameraEntity()==client.player && !modules.itemEsp().isEnabled()), "live profile reload restores camera and applies new module state");
+                profiles.apply(before);context.runOnClient(client -> modules.reload());context.waitTicks(2);
+                check(context.computeOnClient(client -> modules.itemEsp().isEnabled() && modules.itemEsp().targetIds().contains("minecraft:diamond_ore")), "profile rollback/reload restores selected targets and enabled state");
+            } catch(java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
             context.runOnClient(client -> { for (Module module : modules.modules()) module.setEnabled(false); });
         }
         report.put("assertions", assertions); report.put("result","passed");
