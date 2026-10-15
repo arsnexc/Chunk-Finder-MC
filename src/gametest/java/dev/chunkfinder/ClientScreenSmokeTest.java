@@ -115,6 +115,9 @@ public final class ClientScreenSmokeTest implements FabricClientGameTest {
         CompletableFuture<Void> reload = context.computeOnClient(Minecraft::reloadResourcePacks);
         context.waitFor(client -> reload.isDone(), 1200);
         reload.join();
+        // The reload future can finish before the loading overlay fades away.
+        // Capture the production screen, not a partially obscuring Mojang splash.
+        context.waitFor(client -> client.getOverlay() == null, 200);
         context.waitTicks(2);
         fontCheck(context);
         screenshot(context, "modules-native-after-reload");
