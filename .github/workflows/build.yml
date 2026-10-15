@@ -139,12 +139,12 @@ jobs:
           assert contracts is not None, 'Native Minecraft module API contracts did not report success'
           print(f'::notice title=Minecraft module contract tests::{contracts.group(0)}')
 
-          jar = Path('build/libs/chunk-finder-2-2.7.0-rc.2.jar')
+          jar = Path('build/libs/chunk-finder-2-2.7.0.jar')
           with zipfile.ZipFile(jar) as archive:
               assert archive.testzip() is None, 'Corrupt JAR entry'
               metadata = json.loads(archive.read('fabric.mod.json'))
               assert metadata['id'] == 'chunkfinder'
-              assert metadata['version'] == '2.7.0-rc.2'
+              assert metadata['version'] == '2.7.0'
               assert metadata['depends']['minecraft'] == '1.21.11'
               assert metadata['license'] == 'MIT'
               for entry in (
@@ -251,8 +251,8 @@ jobs:
           print(f'::notice title=Installable mod::{jar.name} | SHA-256: {digest}')
           print(f'::notice title=UI font lookup::{ttf["file"]} resolves to {font_resource}')
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-              summary.write('## Chunk Finder 2.7.0-rc.2 — work in progress\n\n')
-              summary.write('Release candidate only. The 16-item production ledger is incomplete; separate gameplay-matrix results are required.\n\n')
+              summary.write('## Chunk Finder 2.7.0 build candidate\n\n')
+              summary.write('This is the pre-publication build candidate. The installable artifact is published only after required same-commit gameplay and performance gates pass.\n\n')
               summary.write('Built for Fabric / Minecraft **1.21.11** with **JDK 25**.\n\n')
               summary.write('Command: `./gradlew --no-daemon clean build`\n\n')
               summary.write(f'UI regression tests: **{regression.group(1)} assertions passed**.\n\n')

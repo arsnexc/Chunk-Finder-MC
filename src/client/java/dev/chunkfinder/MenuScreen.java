@@ -25,7 +25,7 @@ abstract class MenuScreen extends Screen {
     }
     @Override protected void init() { layout(); }
     @Override public Component getNarrationMessage() {
-        return Component.literal(getTitle().getString() + ". " + (gui == null ? "" : gui.focusedLabel()));
+        return Component.literal(getTitle().getString() + ". " + (gui == null ? "" : gui.narration()));
     }
     @Override public void renderBackground(GuiGraphics graphics, int x, int y, float delta) {
         super.renderBackground(graphics, x, y, delta); graphics.fill(0, 0, width, height, 0x58000000);

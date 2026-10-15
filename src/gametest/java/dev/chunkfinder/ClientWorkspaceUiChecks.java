@@ -51,6 +51,14 @@ final class ClientWorkspaceUiChecks {
             check(context.computeOnClient(client->modules.interfaceSettings().hiddenHud().contains("blocks")&&modules.interfaceSettings().pinnedHud().contains("blocks")),"HUD row visibility and pin controls are wired");
             check(context.computeOnClient(client->modules.itemEsp().isEnabled()==enabled),"HUD controls do not toggle the module itself");
 
+            context.setScreen(()->new InterfaceSettingsScreen(parent,modules));context.waitTick();
+            context.runOnClient(client->((InterfaceSettingsScreen)client.screen).gui.reveal("access-controls","diagnostics"));context.getInput().pressKey(GLFW.GLFW_KEY_ENTER);
+            check(context.computeOnClient(client->client.screen instanceof DiagnosticsScreen),"diagnostics action opens its optional page");
+            check(context.computeOnClient(client->client.screen.getNarrationMessage().getString().contains("Chunk Finder")),"native diagnostics exposes installed-version data");
+            context.getInput().pressKey(GLFW.GLFW_KEY_ESCAPE);
+            check(context.computeOnClient(client->client.screen instanceof InterfaceSettingsScreen),"diagnostics returns without adding gameplay HUD rows");
+            context.getInput().pressKey(GLFW.GLFW_KEY_ESCAPE);
+
             var palette=context.computeOnClient(client->modules.itemEsp().colors().snapshot());
             context.setScreen(()->new EspColorScreen(parent,"Block ESP",modules.itemEsp().colors(),modules.itemEsp().targetChoices(),id->modules.itemEsp().colors().fallback(),Set.of("minecraft:stone","minecraft:diamond_ore")));
             click(context,client->ColorEditorLayout.at(client.screen.width,client.screen.height).tools());

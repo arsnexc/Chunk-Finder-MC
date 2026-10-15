@@ -103,3 +103,17 @@ network behavior, multiplayer compatibility, anti-cheat behavior or performance
 on the user's machine. Screenshot capture is evidence for inspection, not a
 pixel-perfect comparison with the design reference. The headless scanner tests
 remain complementary to, not a substitute for, those world tests.
+
+
+## 2.7 gameplay gate (separate from UI/API-only checks)
+
+With `CHUNKFINDER_WORLD_TEST=1`, `ClientGameplayTest` creates a disposable
+integrated single-player world under the isolated test directory. It never uses
+user saves or a public/dedicated server; `eula=false` remains. The required
+reusable matrix checks pinned vanilla/Sodium/Iris variants and measured CI
+budgets before the final JAR can be published. See [2.7 verification scope](PRODUCTION_2_7.md).
+
+The UI/API-only statements above describe those suites, not this opted-in
+world suite. Fabric 0.141.6's deterministic network synchronizer stalled world
+startup; the gameplay job uses its official test-only disable option and waits
+for observable client/server state instead. Production networking is unchanged.

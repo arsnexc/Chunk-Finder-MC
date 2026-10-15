@@ -1,4 +1,4 @@
-# 2.7 production work — controls, safeguards and evidence
+# 2.7.0 — controls, safeguards and verification
 
 This document describes the implementation. **Execution status belongs to
 [PRODUCTION_ROADMAP.md](PRODUCTION_ROADMAP.md) and the matching Actions run.**
@@ -121,7 +121,7 @@ states cannot be authenticated or decoded by a client-only detector.
 
 The reusable matrix creates disposable integrated single-player worlds beneath
 `build/run/clientGameTest`. It tests real underground movement, loaded edges,
-solid-terrain camera movement, stationary player body, dimension transfer,
+solid-terrain camera movement and compiled/visible cave sections, stationary player body, dimension transfer,
 death/respawn, speed/horizontal/braking controls, real ESP updates/fairness,
 cross-chunk clues, ignores and live profile reloads. User saves and public
 servers are never used, dedicated tests remain disabled and `eula=false` remains.

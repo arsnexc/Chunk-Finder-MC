@@ -107,7 +107,7 @@ public class ProfileStore {
     /** Overrideable for deterministic failure testing; production uses atomic local replacement. */
     protected void writeSetting(Path path,String text) throws IOException { restoreSetting(path,text); }
     private static void restoreSetting(Path path,String text) throws IOException {if(text==null)Files.deleteIfExists(path);else writeAtomic(path,text);}
-    private static String encode(Snapshot snapshot){JsonObject o=new JsonObject();o.addProperty("format","chunkfinder-client-profile-1");JsonObject files=new JsonObject();new TreeMap<>(snapshot.files).forEach(files::addProperty);o.add("files",files);return new GsonBuilder().setPrettyPrinting().create().toJson(o);}
+    private static String encode(Snapshot snapshot){JsonObject o=new JsonObject();o.addProperty("format","chunkfinder-client-profile-1");JsonObject files=new JsonObject();new TreeMap<>(snapshot.files).forEach(files::addProperty);o.add("files",files);return new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create().toJson(o);}
     private static void writeAtomic(Path path,String text) throws IOException {
         if(Files.isSymbolicLink(path))throw new IOException("Refusing symbolic-link destination");
         Path temp=Files.createTempFile(path.getParent(),"chunkfinder-",".tmp");

@@ -39,6 +39,18 @@ public final class ClientGameplayTest implements FabricClientGameTest {
             throw failure;
         }
     }
+    private static boolean sectionVisible(net.minecraft.client.Minecraft client,BlockPos pos) {
+        if(client.level==null || !client.levelRenderer.isSectionCompiledAndVisible(pos))return false;
+        if(!FabricLoader.getInstance().isModLoaded("sodium"))return true;
+        // Sodium's vanilla compatibility method checks compilation only. Query its
+        // actual visible-section set too, without adding a production dependency.
+        try {
+            Class<?> renderer=Class.forName("net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer");
+            Object instance=renderer.getMethod("instance").invoke(null);
+            return Boolean.TRUE.equals(renderer.getMethod("isBoxVisible",double.class,double.class,double.class,double.class,double.class,double.class)
+                    .invoke(instance,(double)pos.getX(),(double)pos.getY(),(double)pos.getZ(),pos.getX()+1.0,pos.getY()+1.0,pos.getZ()+1.0));
+        } catch(ReflectiveOperationException e) { throw new AssertionError("Pinned Sodium visibility API unavailable",e); }
+    }
     @Override public void runTest(ClientGameTestContext context) {
         if (!"1".equals(System.getenv("CHUNKFINDER_WORLD_TEST"))) {
             System.out.println("Gameplay scenarios skipped (explicit CI opt-in required)."); return;
@@ -60,6 +72,8 @@ public final class ClientGameplayTest implements FabricClientGameTest {
             world.getServer().runCommand("gamerule minecraft:spawner_blocks_work false");
             world.getServer().runCommand("fill 0 60 0 15 88 15 minecraft:stone");
             world.getServer().runCommand("fill 4 63 4 11 70 11 minecraft:air");
+            world.getServer().runCommand("fill 6 81 9 10 85 13 minecraft:air");
+            world.getServer().runCommand("setblock 8 86 11 minecraft:sea_lantern");
             world.getServer().runCommand("setblock 8 68 10 minecraft:diamond_ore");
             world.getServer().runCommand("setblock 9 63 10 minecraft:chest");
             world.getServer().runCommand("setblock 10 63 10 minecraft:spawner{Delay:32767s}");
@@ -94,6 +108,8 @@ public final class ClientGameplayTest implements FabricClientGameTest {
             context.runOnClient(client -> {modules.freecam().setAcceleration(0);modules.freecam().setDeceleration(0);});
             context.getInput().holdKeyFor(options -> options.keyJump, 36); context.waitTicks(2);
             check(context.computeOnClient(client -> client.level.getBlockState(client.getCameraEntity().blockPosition()).is(Blocks.STONE)), "camera can enter loaded solid terrain without moving the body");
+            context.waitFor(client -> sectionVisible(client,new BlockPos(8,86,11)),1200);
+            check(context.computeOnClient(client -> sectionVisible(client,new BlockPos(8,86,11))), "loaded cave section is actually compiled and visible from the solid-terrain camera");
             context.takeScreenshot("gameplay-" + variant + "-underground");
             int edgeChunk=context.computeOnClient(client -> {
                 for(int x=0;x<64;x++)if(LoadedChunks.at(client.level,x,0)&&!LoadedChunks.at(client.level,x+1,0))return x;
@@ -172,12 +188,18 @@ public final class ClientGameplayTest implements FabricClientGameTest {
             context.waitFor(client -> client.level.getBlockState(new BlockPos(17,63,8)).is(Blocks.CRAFTING_TABLE),200);
             context.runOnClient(client -> { modules.chunkFinder().setStrictBaseClues(true);modules.chunkFinder().requestRescan(); });
             context.waitFor(client -> !modules.chunkFinder().clues().isEmpty(),2400);
-            String clue=context.computeOnClient(client -> modules.chunkFinder().clues().getFirst().key());
             check(context.computeOnClient(client -> modules.chunkFinder().clues().getFirst().explanation().contains("beacon") && modules.chunkFinder().clues().getFirst().explanation().contains("storage")), "real cross-chunk clue explains its supporting blocks");
-            context.runOnClient(client -> modules.chunkFinder().ignoreClue(clue,true));
-            check(context.computeOnClient(client -> modules.chunkFinder().baseCount()==0), "individual false-positive area can be ignored without changing blocks");
-            context.runOnClient(client -> modules.chunkFinder().clearIgnored());
-            check(context.computeOnClient(client -> modules.chunkFinder().baseCount()>0), "ignored clue can be restored");
+            context.setScreen(() -> new ModuleSettingsScreen(modules));
+            context.runOnClient(client -> ((ModuleSettingsScreen)client.screen).gui.reveal("chunks","review"));context.getInput().pressKey(GLFW.GLFW_KEY_ENTER);
+            check(context.computeOnClient(client -> client.screen instanceof BaseClueReviewScreen), "base evidence action opens the real review UI");
+            context.runOnClient(client -> ((BaseClueReviewScreen)client.screen).gui.reveal("clue-0",null));
+            check(context.computeOnClient(client -> client.screen.getNarrationMessage().getString().contains("beacon")), "review UI narrates actual supporting evidence");
+            context.takeScreenshot("gameplay-"+variant+"-base-evidence");
+            context.getInput().pressKey(GLFW.GLFW_KEY_ENTER);
+            check(context.computeOnClient(client -> modules.chunkFinder().baseCount()==0), "individual false-positive area can be ignored through the UI without changing blocks");
+            context.runOnClient(client -> ((BaseClueReviewScreen)client.screen).gui.reveal("restore",null));context.getInput().pressKey(GLFW.GLFW_KEY_ENTER);
+            check(context.computeOnClient(client -> modules.chunkFinder().baseCount()>0), "ignored clue can be restored through the UI");
+            context.getInput().pressKey(GLFW.GLFW_KEY_ESCAPE);context.getInput().pressKey(GLFW.GLFW_KEY_ESCAPE);
             ProfileStore profiles=new ProfileStore(FabricLoader.getInstance().getConfigDir());
             try {
                 var before=profiles.capture();var files=new java.util.TreeMap<>(before.files());

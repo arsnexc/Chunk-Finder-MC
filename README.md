@@ -1,20 +1,16 @@
-> **Work in progress: 2.7.0-rc.2.** The requested 16-item production roadmap is being implemented and validated in stages. See [the evidence ledger](docs/PRODUCTION_ROADMAP.md). Do not interpret an RC/UI-only build as completion of the full roadmap.
->
-> Last completed 2.6.0 build: [installable JAR](https://github.com/arsnexc/Chunk-Finder-MC/actions/runs/38709346355/artifacts/11959258921). New gameplay checks use disposable single-player worlds; no public server or user saves.
-
-# Chunk Finder 2.6.0
+# Chunk Finder 2.7.0
 
 [![Build mod](https://github.com/arsnexc/Chunk-Finder-MC/actions/workflows/build.yml/badge.svg)](https://github.com/arsnexc/Chunk-Finder-MC/actions/workflows/build.yml)
 
-Standalone Minecraft **1.21.11 Fabric** mod project. The Chunk Finder 2.6.0 source lives at this repository's root. Requires Java 21 to run Minecraft, Fabric Loader >=0.19.5 and Fabric API. Build with **JDK 25** for the Fabric Loom toolchain.
+Standalone Minecraft **1.21.11 Fabric** mod project. The Chunk Finder 2.7.0 source lives at this repository's root. Requires Java 21 to run Minecraft, Fabric Loader >=0.19.5 and Fabric API >=0.141.6. Build with **JDK 25** for the Fabric Loom toolchain.
 
 ## Download the mod — no local build needed
 
 1. Open [GitHub Actions](https://github.com/arsnexc/Chunk-Finder-MC/actions/workflows/build.yml) and select the latest successful **Build mod** run for the branch containing this version. Until the UI changes are merged, use `arena/64b54617-chunk-finder-mc`, not the older `main` build.
-2. Under **Artifacts**, download **chunk-finder-2-2.6.0.jar** (GitHub sign-in is required). This is the installable JAR, not the sources JAR; no ZIP extraction is needed.
+2. Under **Artifacts**, download **chunk-finder-2-2.7.0.jar** (GitHub sign-in is required). This is the installable JAR, not the sources JAR; no ZIP extraction is needed.
 3. Put it in your Minecraft 1.21.11 Fabric instance's `mods/` folder alongside Fabric API, and remove older Chunk Finder versions.
 
-The workflow builds automatically on pushes and pull requests, can also be run manually from Actions, and retains the JAR artifact for 90 days. Build caches and generated JARs are not committed to the repository.
+The workflow builds automatically on pushes and pull requests. The final **Publish gated installable JAR** job requires all renderer/gameplay/performance variants to pass; `candidate-not-release-*` artifacts are not release artifacts. The verified JAR is retained for 90 days. Build caches and generated JARs are not committed to the repository.
 
 ## Build from source (optional)
 
@@ -24,9 +20,26 @@ GitHub Actions runs the command below with **JDK 25**. To reproduce the build yo
 ./gradlew --no-daemon clean build
 ```
 
-On Windows use `gradlew.bat --no-daemon clean build`. Install **only** `build/libs/chunk-finder-2-2.6.0.jar` in the game's `mods/` folder; remove older Chunk Finder versions. Building needs access to Gradle, Fabric, Mojang and Maven repositories.
+On Windows use `gradlew.bat --no-daemon clean build`. Install **only** `build/libs/chunk-finder-2-2.7.0.jar` in the game's `mods/` folder; remove older Chunk Finder versions. Building needs access to Gradle, Fabric, Mojang and Maven repositories.
 
-## New in 2.6.0
+## New in 2.7.0
+
+The [16-item implementation/evidence ledger](docs/PRODUCTION_ROADMAP.md) records scope and results. See [controls, safeguards and verification](docs/PRODUCTION_2_7.md) for full details.
+
+- Correct **resident-chunk checks**, loaded-edge warnings, received block-update probes and a shared bounded ESP read cache.
+- **Target rules**: fair per-target priority, distance and display limits so common blocks do not consume every available slot.
+- Optional **Diagnostics** with version/renderer, queues, filters, shared-read accounting and measured timing/Java heap.
+- **Draggable snapped columns**, saved order/reset, **Find / Ctrl+F** module/setting/action search and saved favorites.
+- **HUD layout editor**, normalized anchors, per-row visibility/pins, opacity and hide-zero controls.
+- **Palette Tools**: colorblind-friendly/contrast presets, legend, validated local import/export and draft confirmation.
+- **Profiles / backups**: local snapshots, explicit previews, backup-before-apply, rollback/default reset and safe live module reload.
+- **Cross-chunk base evidence**, explanations and reversible session clue-area ignores.
+- Optional **horizontal flight**, acceleration/braking and **V** speed presets; default movement remains immediate.
+- Required **real single-player gameplay/performance gates** for vanilla Fabric, Sodium 0.8.14 and Iris 1.10.8 (shaders disabled), in addition to UI/API/headless checks.
+
+This is not a guarantee of perfect server-data accuracy, universal shader/mod compatibility or desktop FPS. All gameplay test saves are disposable; no public server or user save is used.
+
+## Features retained from 2.6.0
 
 - **Full terrain** Freecam mode disables native section occlusion for already-loaded terrain and restores it on exit. It cannot fetch missing server chunks or undo anti-xray data.
 - One **compact text HUD**, backgrounds off by default, replaces the oversized cards. Configure it through **K → UI / HUD**.
@@ -78,9 +91,9 @@ Remove older Chunk Finder JARs before installing. Existing config filenames and 
 
 ## Controls and modules
 
-**K** opens the dark module UI; **Esc** closes it. **G** toggles Freecam. Freecam uses first-person while active, with **Swap A/D** and **Full terrain** controls. Left-click a module/pill to toggle; right-click a module or click its chevron for settings. Click a category header to minimize/restore it. Drag sliders and scroll panels independently. Narrow windows use the bottom horizontal scrollbar. **Tab / Shift-Tab** navigates headers and controls; **Enter / Space** activates them; arrows adjust sliders or expand/collapse. **UI / HUD** opens presentation and accessibility preferences.
+**K** opens the dark module UI; **Esc** closes it. **G** toggles Freecam. Freecam uses first-person while active, with **Swap A/D** and **Full terrain** controls. Left-click a module/pill to toggle; right-click a module or click its chevron for settings. Click a category header to minimize/restore it. Drag sliders and scroll panels independently. Narrow windows use the bottom horizontal scrollbar. **Tab / Shift-Tab** navigates headers and controls; **Enter / Space** activates them; arrows adjust sliders or expand/collapse. **UI / HUD** opens presentation, diagnostics, profiles and accessibility preferences. Drag headers to reorder snapped columns; **Shift+Left/Right** reorders a focused header. **Find / Ctrl+F** searches controls; **Ctrl+D** stars a result and **Ctrl+B** filters favorites.
 
-Each module retains its existing local settings. All modules start off on a clean install, except settings retained from earlier versions. Expand an ESP and choose **Targets**, toggle several entries, then **Apply**. **Cancel / Esc** discards the draft; **Clear all + Apply** intentionally matches nothing. The normal build runs both UI and module regression tests. GitHub Actions additionally runs [native Minecraft UI and API-contract checks](docs/CLIENT_UI_TESTS.md) and checks the installable JAR and bundled font; these do **not** validate world scanning, multiplayer or gameplay performance. See [multi-target update notes](docs/MULTI_TARGET_UPDATE.md) for controls and remaining checks; [UI history](docs/UI_UPDATE.md) documents the earlier visual/font update.
+Each module retains its existing local settings. All modules start off on a clean install, except settings retained from earlier versions. Expand an ESP and choose **Targets**, toggle several entries, then **Apply**. **Cancel / Esc** discards the draft; **Clear all + Apply** intentionally matches nothing. The normal build runs both UI and module regression tests. GitHub Actions additionally runs [native UI/API checks](docs/CLIENT_UI_TESTS.md), then required isolated gameplay and software-rendered performance checks for the pinned renderer matrix before publishing the JAR. Public servers, arbitrary shader packs and desktop GPU performance are not verified. See [multi-target update notes](docs/MULTI_TARGET_UPDATE.md) for controls and remaining checks; [UI history](docs/UI_UPDATE.md) documents the earlier visual/font update.
 
 | Module | What it does |
 | --- | --- |

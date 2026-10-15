@@ -85,6 +85,7 @@ public final class ClickGui {
         if (changed) panelChanges.accept(Set.copyOf(minimized));
         focus = new Focus("@panel:" + id, null);
     }
+    public String narration(){return (System.nanoTime()<noticeUntil?notice+". ":"")+focusedLabel();}
     public String focusedLabel() {
         if (focus == null) return "Tab to navigate; category headers minimize panels";
         for (FocusBox box : focusBoxes(frame())) if (box.focus.equals(focus)) {

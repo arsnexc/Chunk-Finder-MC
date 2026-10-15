@@ -1,30 +1,30 @@
 # Production roadmap — implementation and evidence ledger
 
-Requested scope: all 16 reliability/customization/detection items. This ledger is
-not a claim of completion. A source implementation, synthetic test, renderer
-launch, and real-world validation are different evidence levels.
+Requested scope: all 16 reliability/customization/detection items. This ledger distinguishes a source implementation, synthetic test, renderer
+launch, and real-world validation. Passing the listed gates is not a promise of
+perfect accuracy or universal compatibility.
 
 No promise of perfect accuracy is possible for server-obfuscated block data or
 heuristic player-ownership detection. No PR may be merged without permission.
 
 | # | Acceptance gate | Status |
 |---|---|---|
-| 1 | Isolated real single-player scenarios: underground/boundary Freecam, dimension transfer, death/respawn; separate vanilla/Sodium/Iris runs | Passed checkpoint 7ca755e: 21 world assertions each on vanilla/Sodium/Iris, shaders disabled; rerun required after remaining features |
-| 2 | Loaded-terrain edge warning, without sending chunk requests | Passed real missing-chunk and stationary-body checks at checkpoint 7ca755e |
-| 3 | Received block updates invalidate stale results and prioritize bounded rescans | Passed real mining/placement updates at checkpoint 7ca755e (2-tick fixture latency) |
-| 4 | Shared bounded block-read cache with hit/miss/read accounting and fair scheduling | Passed real read reuse/hard-cap checks at checkpoint 7ca755e; counters recorded |
-| 5 | Per-target priority, distance and display caps; common blocks cannot evict every rare target | Implemented fair bounded cache/display selection, transactional rules UI and persistence; headless tests pass; native validation pending |
-| 6 | Optional version/renderer/chunk/queue/filter diagnostics page | Implemented; native build/input validation pending |
-| 7 | Header drag reorder, saved snapped positions and reset; keyboard equivalent | Implemented saved snapped column drag/reorder, keyboard equivalent and reset; headless pass, expanded native run pending |
-| 8 | Module/setting/action search and saved favorites | Implemented reveal-only module/setting/action search and saved favorites; headless pass, native run pending |
-| 9 | HUD drag anchors, row visibility/pins, opacity and hide-zero controls | Implemented normalized draggable HUD anchors, row visibility/pins, opacity and hide-zero; headless pass, native run pending |
-| 10 | Colorblind-friendly presets, validated local import/export and legend | Implemented label-backed presets, local palette import/export, preview and legend; headless validation pass, native run pending |
-| 11 | Local profiles, explicit preview/apply, backups and rollback/default restoration | Implemented allowlisted local profiles, explicit preview, backup-before-apply, rollback/default reset and live binding reload; failure-injection/symlink/path tests pass, native/world run pending |
-| 12 | Zoom/resize/focus/narration and optional-animation regression matrix | Expanded headless all-zoom/window checks and native resize/focus/narration/palette/profile scenarios; native run pending |
-| 13 | Cross-chunk base evidence, deduplication and unload/dimension invalidation | Implemented world-aligned cross-chunk evidence index with deduplication and invalidation; headless pass, real-world scenario pending |
-| 14 | Human-readable evidence and reversible ignored clues | Implemented evidence explanations and reversible session clue-area ignores; native/world scenario pending |
-| 15 | Optional horizontal flight, acceleration/deceleration and speed presets | Implemented with legacy instant defaults; headless dynamics pass; gameplay pending |
-| 16 | Measured baseline/on frame-time, heap and first-scan latency; environment-labelled budgets | Initial three-renderer measurements recorded; provisional regression budgets added, broader workloads still needed |
+| 1 | Isolated real single-player scenarios: underground/boundary Freecam, dimension transfer, death/respawn; separate vanilla/Sodium/Iris runs | RC2 passed 31 real-world assertions per renderer (38722682104); final 2.7 adds compiled/visible section assertion |
+| 2 | Loaded-terrain edge warning, without sending chunk requests | Passed actual resident-edge and missing-chunk checks on all three renderers |
+| 3 | Received block updates invalidate stale results and prioritize bounded rescans | Passed real mining/placement update checks; controlled-fixture latency 2 ticks |
+| 4 | Shared bounded block-read cache with hit/miss/read accounting and fair scheduling | Passed shared-state reuse, bounded read/cache checks and rotating scheduling; measured counters recorded |
+| 5 | Per-target priority, distance and display caps; common blocks cannot evict every rare target | Passed headless, native policy UI/API and real dense-stone/rare-ore display-cap scenarios |
+| 6 | Optional version/renderer/chunk/queue/filter diagnostics page | Implemented read-only diagnostics with live version/renderer/queue/filter/measurement data; native build verified |
+| 7 | Header drag reorder, saved snapped positions and reset; keyboard equivalent | Passed saved snapped-column drag/reorder/reset tests and native pointer interaction; Shift+arrows equivalent |
+| 8 | Module/setting/action search and saved favorites | Passed reveal-only search and saved favorites tests, including native Ctrl+F/Ctrl+D paths |
+| 9 | HUD drag anchors, row visibility/pins, opacity and hide-zero controls | Passed normalized placement bounds, per-row visibility/pins/zero filtering, opacity and native placement save |
+| 10 | Colorblind-friendly presets, validated local import/export and legend | Passed preset, legend data, local palette validation/roundtrip and native export/import-preview/cancel paths |
+| 11 | Local profiles, explicit preview/apply, backups and rollback/default restoration | Passed allowlist/path/symlink/schema/rollback tests, native preview/cancel/apply, and real-world profile reload with active Freecam |
+| 12 | Zoom/resize/focus/narration and optional-animation regression matrix | Passed 1021 headless UI assertions and 89 native UI assertions including zoom/window matrix, resize, focus and narration |
+| 13 | Cross-chunk base evidence, deduplication and unload/dimension invalidation | Passed cross-chunk merge/dedup/invalidation tests and real boundary-spanning clue scenario |
+| 14 | Human-readable evidence and reversible ignored clues | Passed real evidence explanation and ignore/restore scenario; session/world-scoped ignores are explicit |
+| 15 | Optional horizontal flight, acceleration/deceleration and speed presets | Passed native camera/input checks, real horizontal/braking/preset movement and lifecycle reset scenarios |
+| 16 | Measured baseline/on frame-time, heap and first-scan latency; environment-labelled budgets | Measured baseline/on timing, Java heap and latency on three software-rendered variants; provisional derived CI budgets pass |
 
 ## Test isolation
 
@@ -36,14 +36,14 @@ Renderer compatibility must identify exact versions and whether a shader pack
 was active. Mesa/Xvfb CI frame times are not desktop GPU performance claims.
 All incomplete/blocked gates must remain explicit in the final delivery.
 
-## Current validation findings
+## Startup investigation history
 
 - Build/UI/API suites pass at `34d723a` and `7a4995a`; these are not gameplay passes.
 - Initial renderer matrix run `38713175808` loaded the intended mods but all three
   variants timed out during integrated-world loading before scenario assertions.
 - Focused run `38714284627` confirmed the integrated server starts; the client
   remains on LevelLoadingScreen with no ClientLevel. Filtered logs/thread capture
-  are available. Normal packet scheduling is being evaluated with Fabric's
+  are available. Normal packet scheduling was then evaluated with Fabric's
   test-only `disableNetworkSynchronizer` option; no production networking bypass.
 - Renderer artifacts are pinned in `tests/renderer-lock.json` with exact IDs and
   SHA-512 digests: Sodium 0.8.14 and Iris 1.10.8, Fabric/Minecraft 1.21.11.
@@ -74,15 +74,30 @@ Measured reports are preserved in `tests/performance/ci-mesa-initial.json`.
 Provisional CI regression gates now compare p95 CPU frame time/heap with the same
 run's baseline and enforce scan/update/read limits. These are software-rendered
 CI fixture budgets, not desktop GPU FPS promises or full workload coverage.
-The remaining UI/profile/cross-chunk work is still not complete.
+At that earlier checkpoint, UI/profile/cross-chunk work remained incomplete; RC2 below includes it.
 
 ## RC2 integration gate
 
 The remaining workspace/profile/HUD/cross-chunk implementations are now present.
-RC2 has not yet passed the expanded native/world checks. Final JAR publication
+RC2 subsequently passed the expanded native/world checks in run `38722682104`. Final JAR publication
 now depends on the same-commit reusable three-renderer gameplay matrix; the
 pre-gate artifact is explicitly named `candidate-not-release-*`.
 
 The Minecraft dependency is restricted to the exact tested 1.21.11 version.
 The Inter license asset was renamed to a lowercase resource-safe path, with its
 license text and the font binary unchanged, eliminating its resource-path error.
+
+## RC2 complete integration evidence
+
+Run **38722682104**, commit `47ad3328916b6afeab0a57dcbdb8ddfbf66563da`, passed:
+- 1,021 headless UI assertions and 1,594 module assertions.
+- 89 native UI assertions and 352 native module/API assertions.
+- 31 real-world assertions **per renderer** on vanilla, Sodium 0.8.14 and Iris
+  1.10.8 + Sodium (shader packs disabled), plus measured performance gates.
+- Final candidate hash re-verification and gated publication.
+
+The final 2.7.0 version build also requires a compiled-and-visible loaded cave
+section check (including Sodium's actual visibility API, not merely compilation).
+Its final result is the matching same-commit Actions run, not an assumed pass.
+No external/public-server, arbitrary shader-pack, all-hardware or anti-cheat
+compatibility claim is made. No PR has been merged.
