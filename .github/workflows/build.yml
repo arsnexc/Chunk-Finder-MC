@@ -79,11 +79,22 @@ jobs:
           import os
           from pathlib import Path
 
-          log = Path(os.environ['RUNNER_TEMP']) / 'chunkfinder-client-smoke.log'
-          if log.exists():
-              tail = '\n'.join(log.read_text(errors='replace').splitlines()[-140:])
-              tail = tail[-18000:].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-              print(f'::error title=Minecraft UI smoke diagnostics::{tail}')
+          for label, log in (
+              ('launcher', Path(os.environ['RUNNER_TEMP']) / 'chunkfinder-client-smoke.log'),
+              ('client', Path('build/run/clientGameTest/logs/latest.log')),
+          ):
+              if not log.exists():
+                  continue
+              # Long JVM classpaths must not hide the actual exception. GitHub
+              # truncates individual annotations, so emit small, bounded chunks.
+              lines = log.read_text(errors='replace').splitlines()[-140:]
+              lines = [line if len(line) <= 600 else line[:400] + ' ... ' + line[-190:]
+                       for line in lines]
+              tail = '\n'.join(lines)[-14000:]
+              for offset in range(0, len(tail), 3500):
+                  chunk = tail[offset:offset + 3500]
+                  chunk = chunk.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+                  print(f'::error title=Minecraft UI {label} diagnostics {offset // 3500 + 1}::{chunk}')
           PYTHON
 
       - name: Upload native UI test evidence
