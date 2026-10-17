@@ -79,6 +79,7 @@ public final class ModuleManager {
         List<HudRows.Item> rows=new ArrayList<>();
         if(freecam.isEnabled() && freecam.boundary()!=dev.chunkfinder.core.TerrainBoundary.Status.AVAILABLE)
             rows.add(new HudRows.Item("terrain",new CompactHud.Row("Terrain",freecam.boundary()==dev.chunkfinder.core.TerrainBoundary.Status.EDGE?"EDGE":"UNLOADED","Player-loaded data ends here; no chunk requests",0xFFFFBF69),false,true));
+        if(freecam.isEnabled()&&freecam.insideSolid())rows.add(new HudRows.Item("cutaway",new CompactHud.Row("View",freecam.cutaway()&&!freecam.viewStatus().startsWith("Cutaway unsupported")?"CUTAWAY":"SOLID",freecam.viewStatus(),0xFF91D9FF),false,true));
         if(freecam.isEnabled())rows.add(new HudRows.Item("freecam",new CompactHud.Row("Freecam",freecam.speed()+"x",freecam.hudDetails(),0xFF8CE0BD),false,false));
         if(chunkFinder.isEnabled())rows.add(new HudRows.Item("bases",new CompactHud.Row(chunkFinder.strictBaseClues()?"Base clues":"Activity hints",Long.toString(chunkFinder.baseCount()),chunkFinder.hudDetails(),chunkFinder.colors().color("chunkfinder:base_clue",0xFFFFCE8D)),chunkFinder.baseCount()==0,false));
         if(chunkFinder.isEnabled()&&chunkFinder.showGeodes())rows.add(new HudRows.Item("geodes",new CompactHud.Row("Geodes",Long.toString(chunkFinder.geodeCount()),"Natural budding-amethyst clusters",chunkFinder.colors().color("chunkfinder:geode",0xFFB493FF)),chunkFinder.geodeCount()==0,false));

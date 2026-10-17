@@ -18,12 +18,14 @@ public final class FreecamModule extends Module {
     private final FreecamConfig settings = new FreecamConfig(FabricLoader.getInstance().getConfigDir().resolve("chunkfinder-freecam.json"));
     private final FreecamControls controls = new FreecamControls();
     private final FreecamTerrainVisibility terrain = new FreecamTerrainVisibility();
+    private final FreecamCutaway cutawayView = new FreecamCutaway();
     private Entity camera;
     private LocalPlayer owner;
     private Entity previousCamera;
     private Input captured;
     private final FlightSmoothing smoothing = new FlightSmoothing();
     private TerrainBoundary.Status boundary = TerrainBoundary.Status.AVAILABLE;
+    private boolean cutawayHeldCull;
 
     public FreecamModule() { super("Freecam", ModuleCategory.VISUALS, false); }
 
@@ -36,11 +38,22 @@ public final class FreecamModule extends Module {
     public String hudDetails() {
         return camera == null ? "Player-loaded chunks only" : camera.getBlockX() + ", " + camera.getBlockY() + ", " + camera.getBlockZ() + " · loaded data only";
     }
+    public boolean cutaway(){return settings.cutaway();}
+    public void setCutaway(boolean value){settings.cutaway(value);Minecraft client=Minecraft.getInstance();if(isEnabled()&&valid(client))cutawayView.update(client,camera,value);else cutawayView.stop(client);syncCutawayCull(client);}
+    public boolean cutawayActive(){return cutawayView.active();}
+    public String viewStatus(){return cutawayView.status();}
+    public boolean insideSolid(){return cutawayView.inside();}
+    public long cutawayMasks(){return cutawayView.masks();}
+    public int cutawayDirtySections(){return cutawayView.dirtySections();}
+    public void refreshTerrain(){Minecraft client=Minecraft.getInstance();if(isEnabled()&&valid(client)){cutawayView.refresh(client);client.levelRenderer.needsUpdate();}}
     public boolean fullTerrain() { return settings.fullTerrain(); }
     public void setFullTerrain(boolean value) {
         settings.fullTerrain(value);
         Minecraft client = Minecraft.getInstance();
+        // Sample the pre-cutaway cull state so Full terrain does not persist a temporary override.
+        if (cutawayHeldCull && client != null) { client.smartCull = true; cutawayHeldCull = false; }
         if (isEnabled() && valid(client) && value) terrain.begin(client); else terrain.end(client);
+        if (isEnabled() && valid(client)) syncCutawayCull(client);
     }
     public TerrainBoundary.Status boundary() { return boundary; }
     public boolean horizontalFlight() { return settings.horizontal(); }
@@ -108,11 +121,28 @@ public final class FreecamModule extends Module {
         terrain.enforce(client);
         camera.setOldPosAndRot();
         if (captured != null && client.screen == null) moveCamera(); else smoothing.reset();
+        cutawayView.update(client,camera,cutaway());
+        syncCutawayCull(client);
         boundary = TerrainBoundary.check(camera.getBlockX(), camera.getBlockZ(),
                 (x, z) -> LoadedChunks.at(client.level, x, z));
         restoreInputs(client);
     }
 
+    private void syncCutawayCull(Minecraft client) {
+        if (client == null) return;
+        boolean hold = isEnabled() && cutaway() && cutawayView.inside() && !fullTerrain()
+                && !cutawayView.status().startsWith("Cutaway unsupported");
+        if (hold && client.smartCull) {
+            client.smartCull = false; cutawayHeldCull = true;
+            if (client.levelRenderer != null) client.levelRenderer.needsUpdate();
+        } else if (!hold && cutawayHeldCull) {
+            cutawayHeldCull = false;
+            if (!fullTerrain()) {
+                client.smartCull = true;
+                if (client.levelRenderer != null) client.levelRenderer.needsUpdate();
+            }
+        }
+    }
     private boolean valid(Minecraft client) {
         return FeatureAccess.allowed(client) && client.player == owner && client.player.isAlive()
                 && !client.player.isRemoved() && camera != null
@@ -135,6 +165,9 @@ public final class FreecamModule extends Module {
     private void stop(Minecraft client) {
         smoothing.reset(); boundary = TerrainBoundary.Status.AVAILABLE;
         restoreInputs(client);
+        cutawayView.stop(client);
+        if (cutawayHeldCull && client != null && !fullTerrain()) { client.smartCull = true; if (client.levelRenderer != null) client.levelRenderer.needsUpdate(); }
+        cutawayHeldCull = false;
         terrain.end(client);
         // Restore our perspective only when we still own the camera, or vanilla
         // has returned it to the player (e.g. respawn). Do not override another mod.

@@ -31,9 +31,11 @@ final class DiagnosticsScreen extends Screen {
         next.add("Block reads this tick: " + reads.reads() + " · shared hits " + reads.hits() + " · cached " + reads.cached());
         next.add("Received updates " + modules.receivedBlockUpdates() + " · pending " + modules.pendingBlockUpdates() + " · overflow resets " + modules.blockUpdateOverflows());
         next.add("Freecam terrain: " + modules.freecam().boundary());
+        next.add("Inside-block view: "+modules.freecam().viewStatus()+" · render overrides "+modules.freecam().cutawayMasks());
+        next.add("Cutaway dirty sections: "+modules.freecam().cutawayDirtySections()+" · Sodium hook: "+SodiumCutawayBridge.status());
         for (BlockEspModule module : List.of(modules.itemEsp(), modules.storageEsp(), modules.spawnerEsp(), modules.ancientDebrisFinder())) {
             next.add(module.name() + ": " + (module.isEnabled() ? "on" : "off") + " · loaded in radius " + module.loadedChunkCount()
-                    + " · scanned " + module.scannedChunkCount() + " · queued " + module.pendingChunkCount() + " · edits " + module.pendingUpdates());
+                    + " · scanned " + module.scannedChunkCount() + " · queued " + module.pendingChunkCount() + " · edits " + module.pendingUpdates() + " · skipped sections " + module.skippedSections());
             next.add("  " + module.targetSummary() + " · " + (module.exposedOnly() ? "exposed only" : "buried included") + " · " + module.detectedCount() + " candidates · " + module.policies().snapshot().targets().size() + " policy overrides");
         }
         next.add("Base clues: " + modules.chunkFinder().baseCount() + " · strict " + modules.chunkFinder().strictBaseClues());

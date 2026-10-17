@@ -108,6 +108,12 @@ public final class ClientGameplayTest implements FabricClientGameTest {
             context.runOnClient(client -> {modules.freecam().setAcceleration(0);modules.freecam().setDeceleration(0);});
             context.getInput().holdKeyFor(options -> options.keyJump, 36); context.waitTicks(2);
             check(context.computeOnClient(client -> client.level.getBlockState(client.getCameraEntity().blockPosition()).is(Blocks.STONE)), "camera can enter loaded solid terrain without moving the body");
+            context.waitFor(client -> modules.freecam().insideSolid() && modules.freecam().cutawayMasks() > 0
+                    && client.level.getBlockState(client.getCameraEntity().blockPosition()).is(Blocks.STONE), 1200);
+            check(context.computeOnClient(client -> modules.freecam().cutawayActive() && modules.freecam().cutawayMasks() > 0
+                    && client.level.getBlockState(client.getCameraEntity().blockPosition()).is(Blocks.STONE)),
+                    "inside-block view rebuilds a render-only opening and does not replace world blocks");
+            if (!variant.equals("vanilla")) check(context.computeOnClient(client -> SodiumCutawayBridge.status().equals("ready")), "pinned Sodium cutaway hook attached to the render copy");
             context.waitFor(client -> sectionVisible(client,new BlockPos(8,86,11)),1200);
             check(context.computeOnClient(client -> sectionVisible(client,new BlockPos(8,86,11))), "loaded cave section is actually compiled and visible from the solid-terrain camera");
             context.takeScreenshot("gameplay-" + variant + "-underground");
@@ -155,6 +161,7 @@ public final class ClientGameplayTest implements FabricClientGameTest {
             report.put("firstBlockScanTicks", firstScan);
             report.put("sharedReadCache", context.computeOnClient(client -> modules.blockReads().stats()));
             check(context.computeOnClient(client -> modules.itemEsp().detectedCount() > 0), "production ESP finds the real test ore");
+            check(context.computeOnClient(client -> modules.itemEsp().skippedSections() > 0), "palette skipping avoided sections that cannot contain the selected ore");
             context.runOnClient(client -> modules.diagnostics().reset()); context.waitTicks(200);
             var enabled = context.computeOnClient(client -> modules.diagnostics().snapshot()); report.put("modulesEnabled",enabled);
             check(enabled.cpuFrame().samples()>30, "benchmark records real rendered-frame samples");

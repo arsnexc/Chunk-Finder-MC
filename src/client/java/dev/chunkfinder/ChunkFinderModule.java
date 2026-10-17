@@ -14,6 +14,8 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import dev.chunkfinder.core.ChunkRange;
 import dev.chunkfinder.core.BaseClues;
+import dev.chunkfinder.core.ScanLayers;
+import dev.chunkfinder.core.LoadedBlockScanner;
 import dev.chunkfinder.settings.PaletteConfig;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.world.level.block.ShulkerBoxBlock;
@@ -60,6 +62,20 @@ public final class ChunkFinderModule extends Module {
     private long tickCount;
     private long nextRefreshTick;
     private static final int BLOCKS_PER_TICK = 4096;
+    private long skippedSections;
+    public long skippedSections() { return skippedSections; }
+    public int pendingChunkCount() { return queue.size() + (activeScan == null ? 0 : 1); }
+    public int scannedChunkCount() { return results.size(); }
+    private static final java.util.Set<net.minecraft.world.level.block.Block> EVIDENCE_BLOCKS = java.util.Set.of(
+            Blocks.BEACON,Blocks.RESPAWN_ANCHOR,Blocks.CONDUIT,Blocks.ENCHANTING_TABLE,
+            Blocks.CHEST,Blocks.TRAPPED_CHEST,Blocks.BARREL,Blocks.ENDER_CHEST,Blocks.FURNACE,Blocks.BLAST_FURNACE,Blocks.SMOKER,
+            Blocks.CRAFTING_TABLE,Blocks.ANVIL,Blocks.CHIPPED_ANVIL,Blocks.DAMAGED_ANVIL,Blocks.BOOKSHELF,Blocks.CHISELED_BOOKSHELF,
+            Blocks.TORCH,Blocks.WALL_TORCH,Blocks.SOUL_TORCH,Blocks.SOUL_WALL_TORCH,Blocks.REDSTONE_TORCH,Blocks.REDSTONE_WALL_TORCH,
+            Blocks.LANTERN,Blocks.SOUL_LANTERN,Blocks.RAIL,Blocks.POWERED_RAIL,Blocks.DETECTOR_RAIL,Blocks.ACTIVATOR_RAIL,
+            Blocks.REDSTONE_WIRE,Blocks.REPEATER,Blocks.COMPARATOR,Blocks.LEVER);
+    static boolean canBeEvidence(BlockState state,boolean geodes) {
+        return EVIDENCE_BLOCKS.contains(state.getBlock()) || state.getBlock() instanceof ShulkerBoxBlock || geodes && state.is(Blocks.BUDDING_AMETHYST);
+    }
     private int queueX = Integer.MIN_VALUE, queueZ = Integer.MIN_VALUE, queueDistance = -1;
 
     public ChunkFinderModule() {
@@ -124,8 +140,9 @@ public final class ChunkFinderModule extends Module {
             publishDetections();
             queueX = Integer.MIN_VALUE; queueZ = Integer.MIN_VALUE; queueDistance = -1; nextRefreshTick = 0;
         }
-        int cx = client.player.blockPosition().getX() >> 4;
-        int cz = client.player.blockPosition().getZ() >> 4;
+        BlockPos viewpoint=ScanView.origin(client);
+        int cx = viewpoint.getX() >> 4;
+        int cz = viewpoint.getZ() >> 4;
         int radius = settings.simulationDistance();
         boolean pruned = results.keySet().removeIf(c -> !ChunkRange.contains(c.x(), c.z(), cx, cz, radius)
                 || !LoadedChunks.at(level,c.x(),c.z()));
@@ -134,7 +151,7 @@ public final class ChunkFinderModule extends Module {
         if ((queue.isEmpty() && activeScan == null && tickCount >= nextRefreshTick)
                 || radius != queueDistance
                 || queueX == Integer.MIN_VALUE || Math.abs((long) cx - queueX) >= move || Math.abs((long) cz - queueZ) >= move) rebuild(level, cx, cz, radius);
-        int budget = BLOCKS_PER_TICK;
+        int budget = BLOCKS_PER_TICK, sectionChecks = 0;
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         while (budget > 0) {
             if (activeScan == null) {
@@ -145,7 +162,7 @@ public final class ChunkFinderModule extends Module {
                     if (results.remove(chunk) != null) publishDetections();
                     continue;
                 }
-                activeScan = new ChunkScan(chunk, ScanHeight.blocksPerChunk(level));
+                activeScan = new ChunkScan(chunk, level.getMinY(), ScanHeight.maxYExclusive(level), viewpoint.getY());
             }
             ChunkScan scan = activeScan;
             // A one-chunk move can leave old work outside the radius without crossing
@@ -156,22 +173,31 @@ public final class ChunkFinderModule extends Module {
                 activeScan = null;
                 continue;
             }
-            int amount = Math.min(budget, scan.total - scan.cursor);
+            if(scan.cursor>=scan.total){finish(scan);continue;}
+            int nextY=scan.layers[scan.cursor/256];
+            if(scan.cursor%256==0 && ScanLayers.fullSection(scan.layers, scan.cursor/256)) {
+                if(sectionChecks>=LoadedBlockScanner.MAX_SECTION_CHECKS_PER_TICK)break;
+                sectionChecks++;
+                if(SectionTargets.excludes(level,scan.chunk.x(),scan.chunk.z(),nextY,state->canBeEvidence(state,settings.geodes()))) {
+                    scan.cursor+=4096;budget--;skippedSections++;
+                    if(scan.cursor>=scan.total){finish(scan);}
+                    continue;
+                }
+            }
+            // Stop at each layer boundary so the next section's palette is inspected.
+            int amount = Math.min(budget, Math.min(scan.total - scan.cursor, 256 - scan.cursor % 256));
             for (int i = 0; i < amount; i++) {
                 int index = scan.cursor + i;
                 int x = scan.chunk.x() * 16 + (index % 256) / 16;
                 int z = scan.chunk.z() * 16 + (index % 256) % 16;
-                int y = level.getMinY() + index / 256;
+                int y = scan.layers[index / 256];
                 BlockState state = level.getBlockState(pos.set(x, y, z));
                 scan.observe(state, x, y, z);
             }
             scan.cursor += amount;
             budget -= amount;
             if (scan.cursor >= scan.total) {
-                if(scan.dirty){queue.remove(scan.chunk);queue.addFirst(scan.chunk);}
-                else {baseIndex.put(scan.chunk.x,scan.chunk.z,scan.clues);results.put(scan.chunk, scan.detections());}
-                activeScan = null;
-                publishDetections();
+                finish(scan);
             } else if (amount == 0) {
                 activeScan = null;
             }
@@ -180,6 +206,12 @@ public final class ChunkFinderModule extends Module {
             nextRefreshTick = tickCount + 40;
         Vec3 camera = client.gameRenderer.getMainCamera().position();
         nearestDetections = Nearest.select(renderDetections, 64, d -> new Vec3(d.x(), d.y(), d.z()).distanceToSqr(camera));
+    }
+
+    private void finish(ChunkScan scan) {
+        if(scan.dirty){queue.remove(scan.chunk);queue.addFirst(scan.chunk);}
+        else {baseIndex.put(scan.chunk.x,scan.chunk.z,scan.clues);results.put(scan.chunk,scan.detections());}
+        activeScan=null;publishDetections();
     }
 
     private void rebuild(ClientLevel level, int cx, int cz, int radius) {
@@ -202,6 +234,7 @@ public final class ChunkFinderModule extends Module {
     private final class ChunkScan {
         private final ChunkCoord chunk;
         private final int total;
+        private final int[] layers;
         private int cursor;
         private boolean dirty;
         private int budding;
@@ -210,7 +243,7 @@ public final class ChunkFinderModule extends Module {
         private int gxMin = Integer.MAX_VALUE, gyMin = Integer.MAX_VALUE, gzMin = Integer.MAX_VALUE;
         private int gxMax = Integer.MIN_VALUE, gyMax = Integer.MIN_VALUE, gzMax = Integer.MIN_VALUE;
 
-        private ChunkScan(ChunkCoord chunk, int total) { this.chunk = chunk; this.total = total; }
+        private ChunkScan(ChunkCoord chunk,int minY,int maxY,int viewY) { this.chunk=chunk;layers=ScanLayers.ordered(minY,maxY,viewY+.5);total=layers.length*256; }
 
         private void observe(BlockState state, int x, int y, int z) {
             if (settings.geodes() && state.is(Blocks.BUDDING_AMETHYST)) {

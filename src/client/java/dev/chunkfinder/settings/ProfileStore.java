@@ -124,7 +124,7 @@ public class ProfileStore {
         }
     }
     private static void validateSettings(String file,JsonObject object) throws IOException {
-        for(String key:Set.of("enabled","traces","blockHighlight","exposedOnly","option","swapStrafe","fullTerrain","horizontalFlight","hud","hudBackgrounds","hudDetails","reducedMotion","highContrast","tooltips","showGeodes","strictBaseClues","hideZeroRows","snapHud"))
+        for(String key:Set.of("enabled","traces","blockHighlight","exposedOnly","option","swapStrafe","fullTerrain","cutaway","horizontalFlight","hud","hudBackgrounds","hudDetails","reducedMotion","highContrast","tooltips","showGeodes","strictBaseClues","hideZeroRows","snapHud"))
             if(object.has(key) && (!object.get(key).isJsonPrimitive() || !object.getAsJsonPrimitive(key).isBoolean()))throw new IOException("Expected boolean: "+file+":"+key);
         bounded(object,"searchRadius",2,12);bounded(object,"simulationDistance",2,12);bounded(object,"sensitivity",1,10);
         bounded(object,"accelerationTicks",0,30);bounded(object,"decelerationTicks",0,30);

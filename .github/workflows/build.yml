@@ -139,12 +139,12 @@ jobs:
           assert contracts is not None, 'Native Minecraft module API contracts did not report success'
           print(f'::notice title=Minecraft module contract tests::{contracts.group(0)}')
 
-          jar = Path('build/libs/chunk-finder-2-2.7.0.jar')
+          jar = Path('build/libs/chunk-finder-2-2.7.1.jar')
           with zipfile.ZipFile(jar) as archive:
               assert archive.testzip() is None, 'Corrupt JAR entry'
               metadata = json.loads(archive.read('fabric.mod.json'))
               assert metadata['id'] == 'chunkfinder'
-              assert metadata['version'] == '2.7.0'
+              assert metadata['version'] == '2.7.1'
               assert metadata['depends']['minecraft'] == '1.21.11'
               assert metadata['license'] == 'MIT'
               for entry in (
@@ -176,6 +176,15 @@ jobs:
                   'dev/chunkfinder/core/PalettePresets.class',
                   'dev/chunkfinder/mixin/ClientBlockUpdatesMixin.class',
                   'dev/chunkfinder/FreecamTerrainVisibility.class',
+                  'dev/chunkfinder/FreecamCutaway.class',
+                  'dev/chunkfinder/ScanView.class',
+                  'dev/chunkfinder/SectionTargets.class',
+                  'dev/chunkfinder/SodiumCutawayBridge.class',
+                  'dev/chunkfinder/core/CutawayVolume.class',
+                  'dev/chunkfinder/core/ScanLayers.class',
+                  'dev/chunkfinder/mixin/LevelRendererAccess.class',
+                  'dev/chunkfinder/mixin/RenderSectionCutawayMixin.class',
+                  'dev/chunkfinder/mixin/SodiumCutawayMixin.class',
                   'dev/chunkfinder/MenuScreen.class',
                   'dev/chunkfinder/InterfaceSettingsScreen.class',
                   'dev/chunkfinder/EspColorScreen.class',
@@ -226,7 +235,7 @@ jobs:
               for test_class in ('UiRegressionTest', 'UiTestFixtures', 'UiPreview', 'AwtUiCanvas', 'UiEnhancementTest'):
                   assert not any(entry.startswith(f'dev/chunkfinder/ui/{test_class}')
                                  for entry in archive.namelist()), f'Test fixture leaked into mod: {test_class}'
-              for test_class in ('ModuleRegressionTest', 'TrajectoryRegressionTest', 'FilterSettingsRegressionTest', 'PresentationRegressionTest', 'ReliabilityRegressionTest', 'TargetPolicyRegressionTest', 'ProfilePaletteRegressionTest'):
+              for test_class in ('ModuleRegressionTest', 'TrajectoryRegressionTest', 'FilterSettingsRegressionTest', 'PresentationRegressionTest', 'ReliabilityRegressionTest', 'TargetPolicyRegressionTest', 'ProfilePaletteRegressionTest', 'ScanAccelerationRegressionTest'):
                   assert not any(entry.startswith(f'dev/chunkfinder/{test_class}')
                                  for entry in archive.namelist()), f'Module test fixture leaked into mod: {test_class}'
               for test_class in ('ClientScreenSmokeTest', 'ClientModuleContractTest', 'ClientTrajectoryContractChecks', 'ClientFreecamContractChecks', 'ClientExposureContractChecks', 'ClientPresentationContractChecks', 'ClientPresentationUiChecks', 'ClientGameplayTest', 'ClientTargetPolicyChecks', 'ClientWorkspaceUiChecks'):
@@ -251,7 +260,7 @@ jobs:
           print(f'::notice title=Installable mod::{jar.name} | SHA-256: {digest}')
           print(f'::notice title=UI font lookup::{ttf["file"]} resolves to {font_resource}')
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-              summary.write('## Chunk Finder 2.7.0 build candidate\n\n')
+              summary.write('## Chunk Finder 2.7.1 build candidate\n\n')
               summary.write('This is the pre-publication build candidate. The installable artifact is published only after required same-commit gameplay and performance gates pass.\n\n')
               summary.write('Built for Fabric / Minecraft **1.21.11** with **JDK 25**.\n\n')
               summary.write('Command: `./gradlew --no-daemon clean build`\n\n')

@@ -1,13 +1,13 @@
-# Chunk Finder 2.7.0
+# Chunk Finder 2.7.1
 
 [![Build mod](https://github.com/arsnexc/Chunk-Finder-MC/actions/workflows/build.yml/badge.svg)](https://github.com/arsnexc/Chunk-Finder-MC/actions/workflows/build.yml)
 
-Standalone Minecraft **1.21.11 Fabric** mod project. The Chunk Finder 2.7.0 source lives at this repository's root. Requires Java 21 to run Minecraft, Fabric Loader >=0.19.5 and Fabric API >=0.141.6. Build with **JDK 25** for the Fabric Loom toolchain.
+Standalone Minecraft **1.21.11 Fabric** mod project. The Chunk Finder 2.7.1 source lives at this repository's root. Requires Java 21 to run Minecraft, Fabric Loader >=0.19.5 and Fabric API >=0.141.6. Build with **JDK 25** for the Fabric Loom toolchain.
 
 ## Download the mod — no local build needed
 
 1. Open [GitHub Actions](https://github.com/arsnexc/Chunk-Finder-MC/actions/workflows/build.yml) and select the latest successful **Build mod** run for the branch containing this version. Until the UI changes are merged, use `arena/64b54617-chunk-finder-mc`, not the older `main` build.
-2. Under **Artifacts**, download **chunk-finder-2-2.7.0.jar** (GitHub sign-in is required). This is the installable JAR, not the sources JAR; no ZIP extraction is needed.
+2. Under **Artifacts**, download **chunk-finder-2-2.7.1.jar** (GitHub sign-in is required). This is the installable JAR, not the sources JAR; no ZIP extraction is needed.
 3. Put it in your Minecraft 1.21.11 Fabric instance's `mods/` folder alongside Fabric API, and remove older Chunk Finder versions.
 
 The workflow builds automatically on pushes and pull requests. The final **Publish gated installable JAR** job requires all renderer/gameplay/performance variants to pass; `candidate-not-release-*` artifacts are not release artifacts. The verified JAR is retained for 90 days. Build caches and generated JARs are not committed to the repository.
@@ -20,7 +20,11 @@ GitHub Actions runs the command below with **JDK 25**. To reproduce the build yo
 ./gradlew --no-daemon clean build
 ```
 
-On Windows use `gradlew.bat --no-daemon clean build`. Install **only** `build/libs/chunk-finder-2-2.7.0.jar` in the game's `mods/` folder; remove older Chunk Finder versions. Building needs access to Gradle, Fabric, Mojang and Maven repositories.
+On Windows use `gradlew.bat --no-daemon clean build`. Install **only** `build/libs/chunk-finder-2-2.7.1.jar` in the game's `mods/` folder; remove older Chunk Finder versions. Building needs access to Gradle, Fabric, Mojang and Maven repositories.
+
+## New in 2.7.1
+
+Inside-block Freecam no longer depends on occlusion culling to reveal already-received solid terrain. A small render-only opening is rebuilt around the camera; world blocks, collisions and scans are not changed. Scans also inspect nearby heights before deep layers and skip sections whose palette cannot contain a selected target. See [2.7.1 scan and inside-block view](docs/PRODUCTION_2_7_1.md). This still cannot request chunks the server did not send, undo anti-xray, or support every shader pack.
 
 ## New in 2.7.0
 

@@ -122,3 +122,7 @@ The controlled fixture measured 15 ticks for first scan and 2 ticks for an
 incoming block update on every renderer. This is not a worst-case server or
 desktop-GPU guarantee. Shader packs, unrelated mod combinations and external
 servers remain outside the tested matrix. No PR was merged.
+
+## 2.7.1
+
+Faster palette/near-height scanning and a render-only inside-block Freecam opening are described in `docs/PRODUCTION_2_7_1.md`. Acceptance is the same-commit Actions run after that change, not this paragraph. No PR is merged from this note.

@@ -79,10 +79,12 @@ final class FilterSettingsRegressionTest {
             FreecamConfig config = new FreecamConfig(freecam);
             check(config.speed() == 8 && !config.swapStrafe(), "legacy generic option must not silently reverse A/D");
             check(config.fullTerrain(), "full loaded-terrain visibility defaults on");
+            check(config.cutaway(), "inside-block view defaults on without rewriting an old config");
             config.fullTerrain(false);
             config.swapStrafe(true);
             FreecamConfig saved = new FreecamConfig(freecam);
-            check(!saved.fullTerrain(), "terrain visibility preference survives reload");
+            check(!saved.fullTerrain() && saved.cutaway(), "terrain visibility preference survives reload and does not disable inside-block view");
+            saved.cutaway(false); check(!new FreecamConfig(freecam).cutaway(), "inside-block view preference persists"); saved.cutaway(true);
             check(saved.swapStrafe() && saved.speed() == 8, "strafe preference persists independently of speed");
             check(JsonParser.parseString(Files.readString(freecam)).getAsJsonObject().get("unrelated").getAsInt() == 12, "freecam retains unrelated keys");
             saved.speed(99); check(saved.speed() == 10, "freecam speed bounds retained");

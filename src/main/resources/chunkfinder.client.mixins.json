@@ -5,7 +5,10 @@
   "compatibilityLevel": "JAVA_21",
   "client": [
     "MouseLookMixin",
-    "ClientBlockUpdatesMixin"
+    "ClientBlockUpdatesMixin",
+    "LevelRendererAccess",
+    "RenderSectionCutawayMixin",
+    "SodiumCutawayMixin"
   ],
   "injectors": {
     "defaultRequire": 1

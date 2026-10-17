@@ -62,6 +62,9 @@ public final class ModuleSettingsScreen extends MenuScreen {
             list.add(new Action("preset", "Speed preset", "Cycle 2x / 5x / 10x; V while Freecam is active", () -> freecam.speed() + "x", freecam::nextSpeedPreset));
             list.add(toggle("terrain", "Full terrain", "Disable section occlusion while flying; uses only loaded data and may cost FPS", freecam::fullTerrain,
                     () -> freecam.setFullTerrain(!freecam.fullTerrain())));
+            list.add(toggle("cutaway", "Inside-block view", "Local render-only opening inside opaque blocks; world, collision and ESP data stay unchanged", freecam::cutaway,
+                    () -> freecam.setCutaway(!freecam.cutaway())));
+            list.add(new Action("terrain-refresh", "Refresh terrain", "Rebuild only the current cutaway neighborhood; cannot fetch missing chunks", freecam::viewStatus, freecam::refreshTerrain));
             list.add(toggle("swap-strafe", "Swap A/D", "Reverse only lateral movement for your preferred control layout", freecam::swapStrafe,
                     () -> freecam.setSwapStrafe(!freecam.swapStrafe())));
         } else if (module instanceof ChunkFinderModule chunk) {

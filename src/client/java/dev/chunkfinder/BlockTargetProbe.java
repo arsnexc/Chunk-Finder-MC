@@ -36,6 +36,9 @@ class BlockTargetProbe implements LoadedBlockScanner.World, ExposedFaces.World {
         this.blocks=blocks;this.available=available;this.targets=targets;this.exposedOnly=exposedOnly;this.shared=shared;this.policies=policies;
     }
     private static Map<Block,String> ids(Set<Block> blocks) { Map<Block,String> result=new HashMap<>();for(Block block:blocks)result.put(block,BuiltInRegistries.BLOCK.getKey(block).toString());return Map.copyOf(result); }
+    boolean acceptsState(BlockState state) {
+        String id=targets.get(state.getBlock());return id!=null && policies.rule(id).limit()>0;
+    }
     @Override public String lastMatchTarget(){return lastTarget;}
     @Override public TargetPolicies.Snapshot policies(){return policies;}
     @Override public int minY() { return blocks.getMinY(); }

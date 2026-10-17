@@ -23,6 +23,8 @@ public final class LoadedBlockScanner {
         default String lastMatchTarget() { return ""; }
         default TargetPolicies.Snapshot policies() { return TargetPolicies.DEFAULT; }
         default boolean emptySection(int chunkX, int chunkZ, int y) { return false; }
+        /** True only when the entire aligned 16-layer section cannot contain an eligible target. */
+        default boolean canSkipSection(int chunkX, int chunkZ, int y) { return emptySection(chunkX, chunkZ, y); }
     }
     public record Point(int x, int y, int z) {
         public double distanceSquared(double px, double py, double pz) {
@@ -36,9 +38,18 @@ public final class LoadedBlockScanner {
     private static final int DISCOVERY_TICKS = 40;
     private static final int REFRESH_TICKS = 200;
     public static final int MATCHES_PER_CHUNK = 128;
+    public static final int MAX_SECTION_CHECKS_PER_TICK = 256;
+    private int lastSectionChecks, lastSectionsSkipped;
+    private long sectionChecks, sectionsSkipped;
+    private int liveCandidateCount;
+    public int lastSectionChecks() { return lastSectionChecks; }
+    public int lastSectionsSkipped() { return lastSectionsSkipped; }
+    public long sectionsSkipped() { return sectionsSkipped; }
+    public long sectionChecks() { return sectionChecks; }
     private final int budget;
     private final Map<Chunk, Result> results = new HashMap<>();
     private final ArrayDeque<Chunk> queue = new ArrayDeque<>();
+    private final ArrayDeque<Scan> paused = new ArrayDeque<>();
     private final ArrayDeque<Chunk> validation = new ArrayDeque<>();
     private final Set<Chunk> validationQueued = new HashSet<>();
     private Object worldIdentity;
@@ -83,17 +94,18 @@ public final class LoadedBlockScanner {
     }
 
     public void clear() {
-        results.clear(); queue.clear(); validation.clear(); validationQueued.clear();
+        results.clear(); queue.clear(); paused.clear(); validation.clear(); validationQueued.clear();
         changes.clear(); changedQueue.clear(); changedQueued.clear();
         active = null; worldIdentity = null; nextDiscovery = 0; loaded = 0;
         centerX = centerZ = Integer.MIN_VALUE; radius = -1;
         snapshot = List.of(); snapshotTargets=Map.of(); visibleTargets=Map.of();
-        snapshotDirty = false;
+        snapshotDirty = false; lastSectionChecks = lastSectionsSkipped = liveCandidateCount = 0;
     }
 
     public void tick(Object identity, World world, int playerX, int playerY, int playerZ, int requestedRadius) {
         if (identity == null) { clear(); return; }
         if (identity != worldIdentity) { clear(); worldIdentity = identity; }
+        lastSectionChecks = lastSectionsSkipped = 0;
         tick++; policies=world.policies(); originX=playerX+.5; originY=playerY+.5; originZ=playerZ+.5;
         int cx = playerX >> 4, cz = playerZ >> 4, r = Math.max(0, Math.min(12, requestedRadius));
         if (world.maxY() <= world.minY()) { clear(); return; }
@@ -116,54 +128,50 @@ public final class LoadedBlockScanner {
         validateOneChunk(world);
         while (remaining > 0) {
             if (active == null) {
-                Chunk next = queue.pollFirst();
-                if (next == null) break;
-                if (!world.loaded(next.x, next.z) || !inRadius(next, cx, cz, r)) { remove(next); continue; }
-                active = new Scan(next, world.minY(), world.maxY(), playerX, playerY, playerZ, tick, policies);
+                active = takeScan(world, cx, cz, r, playerX, playerY, playerZ);
+                if (active == null) break;
             }
             Scan scan = active;
             // A chunk can unload between slices. Never continue reading or publish a partial stale scan.
             if (!world.loaded(scan.chunk.x, scan.chunk.z) || !inRadius(scan.chunk, cx, cz, r)) {
                 remove(scan.chunk); active = null; continue;
             }
+            int started = scan.cursor;
+            boolean finishedSection = false;
             // Packet-driven chunk changes are applied on the client thread between ticks.
             // Check availability once for this slice, not once for every block in it.
             while (remaining > 0 && scan.cursor < scan.total) {
-                int y = scan.minY + scan.cursor / 256;
-                if (scan.cursor % 256 == 0 && (y & 15) == 0 && y + 16 <= scan.maxY
-                        && world.emptySection(scan.chunk.x, scan.chunk.z, y)) {
-                    scan.cursor += 4096;
-                    remaining--; // Empty-section skips are bounded too.
-                } else {
-                    // Reserve the worst case, then charge actual work. Non-target
-                    // blocks still cost one read even when exposure filtering is on.
-                    if (remaining < maxReads || !world.canRead(maxReads)) { remaining = 0; break; }
-                    int local = scan.cursor % 256;
-                    int x = scan.chunk.x * 16 + local / 16, z = scan.chunk.z * 16 + local % 16;
-                    if (world.matches(x, y, z)) {
-                        double distance = square(x + 0.5 - scan.originX) + square(y + 0.5 - scan.originY)
-                                + square(z + 0.5 - scan.originZ);
-                        if (scan.found.accepts(world.lastMatchTarget(),distance)) scan.found.offer(new Point(x, y, z), world.lastMatchTarget(), distance);
+                int layer = scan.cursor / 256;
+                int y = scan.layers[layer];
+                if (scan.cursor % 256 == 0 && ScanLayers.fullSection(scan.layers, layer)) {
+                    if (lastSectionChecks >= MAX_SECTION_CHECKS_PER_TICK) { remaining = 0; break; }
+                    lastSectionChecks++; sectionChecks++;
+                    if (world.canSkipSection(scan.chunk.x, scan.chunk.z, y)) {
+                        scan.cursor += 4096; remaining--;
+                        lastSectionsSkipped++; sectionsSkipped++;
+                        finishedSection = true;
+                        break;
                     }
-                    int reads = world.lastMatchReads();
-                    if (reads < 0 || reads > maxReads) throw new IllegalStateException("Match exceeded declared read budget");
-                    scan.cursor++; remaining -= Math.max(1, reads);
                 }
+                // Reserve the worst case, then charge actual work. Non-target
+                // blocks still cost one read even when exposure filtering is on.
+                if (remaining < maxReads || !world.canRead(maxReads)) { remaining = 0; break; }
+                int local = scan.cursor % 256;
+                int x = scan.chunk.x * 16 + local / 16, z = scan.chunk.z * 16 + local % 16;
+                if (world.matches(x, y, z)) {
+                    double distance = square(x + 0.5 - scan.originX) + square(y + 0.5 - scan.originY)
+                            + square(z + 0.5 - scan.originZ);
+                    if (scan.found.accepts(world.lastMatchTarget(),distance)) scan.found.offer(new Point(x, y, z), world.lastMatchTarget(), distance);
+                }
+                int reads = world.lastMatchReads();
+                if (reads < 0 || reads > maxReads) throw new IllegalStateException("Match exceeded declared read budget");
+                scan.cursor++; remaining -= Math.max(1, reads);
+                if (scan.cursor - started >= 4096 || scan.cursor % 4096 == 0) { finishedSection = true; break; }
             }
-            if (scan.cursor >= scan.total) {
-                Map<Point,String> ids=new HashMap<>();
-                for(var entry:scan.found.entries()) if(!entry.target().isEmpty())ids.put(entry.value(),entry.target());
-                results.put(scan.chunk, new Result(scan.found.values(), Map.copyOf(ids), tick));
-                // Updates newer than this scan began override its partial observations.
-                changes.entrySet().removeIf(e -> (e.getKey().x>>4)==scan.chunk.x && (e.getKey().z>>4)==scan.chunk.z
-                        && e.getValue().changedAt < scan.startedAt);
-                pruneUpdateQueue();
-                if (validationQueued.add(scan.chunk)) validation.addLast(scan.chunk);
-                active = null;
-                snapshotDirty = true;
-            }
+            if (scan.cursor >= scan.total) finishScan(scan);
+            else if (finishedSection && (!queue.isEmpty() || !paused.isEmpty())) { paused.addLast(scan); active = null; }
         }
-        publish();
+        publish(); updateCandidateCount();
         // Do not advance nextDiscovery here: doing so every idle tick starves chunk discovery forever.
     }
 
@@ -176,13 +184,17 @@ public final class LoadedBlockScanner {
         pruneUpdateQueue();
         if (removed) snapshotDirty = true;
         if (active != null && (!inRadius(active.chunk, cx, cz, r) || !world.loaded(active.chunk.x, active.chunk.z))) active = null;
+        paused.removeIf(scan -> !inRadius(scan.chunk, cx, cz, r) || !world.loaded(scan.chunk.x, scan.chunk.z));
+        Set<Chunk> busy = new HashSet<>();
+        if (active != null) busy.add(active.chunk);
+        for (Scan scan : paused) busy.add(scan.chunk);
         List<Chunk> candidates = new ArrayList<>();
         loaded = 0;
         for (int x = cx - r; x <= cx + r; x++) for (int z = cz - r; z <= cz + r; z++) {
             if (!world.loaded(x, z)) continue;
             loaded++;
             Chunk chunk = new Chunk(x, z);
-            if (active != null && active.chunk.equals(chunk)) continue;
+            if (busy.contains(chunk)) continue;
             Result cached = results.get(chunk);
             if (cached == null || tick - cached.scannedAt >= REFRESH_TICKS) candidates.add(chunk);
         }
@@ -206,7 +218,7 @@ public final class LoadedBlockScanner {
         }
         List<Point> live=new ArrayList<>();Map<Point,String> ids=new HashMap<>();
         for(Point point:result.points) if(world.matches(point.x,point.y,point.z)) {
-            live.add(point);if(!world.lastMatchTarget().isEmpty())ids.put(point,world.lastMatchTarget());
+            live.add(point);ids.put(point,world.lastMatchTarget());
         }
         if (!live.equals(result.points) || !ids.equals(result.targets)) {
             results.put(chunk, new Result(List.copyOf(live),Map.copyOf(ids),result.scannedAt));snapshotDirty=true;
@@ -239,7 +251,7 @@ public final class LoadedBlockScanner {
         FairTargetBuffer<Point> retained=new FairTargetBuffer<>(MATCHES_PER_CHUNK,policies,false);
         for(Point point:old)if(!edits.containsKey(point))retained.offer(point,oldIds.getOrDefault(point,""),point.distanceSquared(originX,originY,originZ));
         edits.forEach((point,change)->{if(change.matches)retained.offer(point,change.target,point.distanceSquared(originX,originY,originZ));});
-        for(var entry:retained.entries()){output.add(entry.value());if(!entry.target().isEmpty())ids.put(entry.value(),entry.target());}
+        for(var entry:retained.entries()){output.add(entry.value());ids.put(entry.value(),entry.target());}
     }
 
     private static boolean inRadius(Chunk c, int x, int z, int r) {
@@ -247,6 +259,54 @@ public final class LoadedBlockScanner {
     }
     private static double square(double n) { return n * n; }
     public List<Point> points() { return snapshot; }
+    /** Completed cache remains separate from the bounded live preview of one active chunk. */
+    public int candidateCount() { return liveCandidateCount; }
+    private void updateCandidateCount() {
+        liveCandidateCount=snapshot.size();
+        countPartial(active);
+        for (Scan scan : paused) countPartial(scan);
+    }
+    private void countPartial(Scan scan) {
+        if (scan == null) return;
+        for (var entry : scan.found.entries()) {
+            Change change=changes.get(entry.value());
+            if ((change==null||change.matches)&&!snapshotTargets.containsKey(entry.value())) liveCandidateCount++;
+        }
+    }
+    private Map<Point,String> partialTargets() {
+        if ((active == null || active.found.size() == 0) && paused.isEmpty()) return Map.of();
+        Map<Point,String> partial = new HashMap<>();
+        addPartial(partial, active);
+        for (Scan scan : paused) addPartial(partial, scan);
+        return partial;
+    }
+    private void addPartial(Map<Point,String> partial, Scan scan) {
+        if (scan == null) return;
+        for (var entry : scan.found.entries()) {
+            Change change = changes.get(entry.value());
+            if (change == null || change.matches) partial.put(entry.value(), change == null ? entry.target() : change.target);
+        }
+    }
+    private Scan takeScan(World world, int cx, int cz, int r, int x, int y, int z) {
+        while (true) {
+            Chunk next = queue.pollFirst();
+            if (next == null) return paused.pollFirst();
+            if (!world.loaded(next.x, next.z) || !inRadius(next, cx, cz, r)) { remove(next); continue; }
+            return new Scan(next, world.minY(), world.maxY(), x, y, z, tick, policies);
+        }
+    }
+    private void finishScan(Scan scan) {
+        Map<Point,String> ids=new HashMap<>();
+        for(var entry:scan.found.entries()) ids.put(entry.value(),entry.target());
+        results.put(scan.chunk, new Result(scan.found.values(), Map.copyOf(ids), tick));
+        // Updates newer than this scan began override its partial observations.
+        changes.entrySet().removeIf(e -> (e.getKey().x>>4)==scan.chunk.x && (e.getKey().z>>4)==scan.chunk.z
+                && e.getValue().changedAt < scan.startedAt);
+        pruneUpdateQueue();
+        if (validationQueued.add(scan.chunk)) validation.addLast(scan.chunk);
+        active = null;
+        snapshotDirty = true;
+    }
     public String targetId(Point point) { return visibleTargets.getOrDefault(point,snapshotTargets.getOrDefault(point,"")); }
     public List<Point> nearest(double x, double y, double z, int limit) {
         return Nearest.select(snapshot, limit, p -> p.distanceSquared(x, y, z));
@@ -261,7 +321,9 @@ public final class LoadedBlockScanner {
         Map<Chunk, Set<Point>> invalid = new HashMap<>();
         Set<Chunk> unloaded = new HashSet<>();
         FairTargetBuffer<Point> candidates=new FairTargetBuffer<>(limit,world.policies(),true);
-        for(Point point:snapshot)candidates.offer(point,snapshotTargets.getOrDefault(point,""),point.distanceSquared(x,y,z));
+        Map<Point,String> partial = partialTargets();
+        for(Point point:snapshot) if (!partial.containsKey(point)) candidates.offer(point,snapshotTargets.getOrDefault(point,""),point.distanceSquared(x,y,z));
+        partial.forEach((point,id) -> candidates.offer(point,id,point.distanceSquared(x,y,z)));
         Map<Point,String> liveIds=new HashMap<>();Map<String,Integer> typeCounts=new HashMap<>();
         for (Point point : candidates.values()) {
             if (!world.canRead(world.maxMatchReads())) break;
@@ -282,8 +344,11 @@ public final class LoadedBlockScanner {
             validation.removeIf(unloaded::contains);
             validationQueued.removeAll(unloaded);
             if (active != null && unloaded.contains(active.chunk)) active = null;
+            paused.removeIf(scan -> unloaded.contains(scan.chunk));
         }
         for (Map.Entry<Chunk, Set<Point>> entry : invalid.entrySet()) {
+            if (active != null && active.chunk.equals(entry.getKey())) active.found.removeIf(entry.getValue()::contains);
+            for (Scan scan : paused) if (scan.chunk.equals(entry.getKey())) scan.found.removeIf(entry.getValue()::contains);
             for(Point point:entry.getValue()) if(changes.containsKey(point)) { changes.put(point,new Change(false,tick,"")); changed=true; }
             Result cached = results.get(entry.getKey());
             if (cached == null) continue;
@@ -296,19 +361,20 @@ public final class LoadedBlockScanner {
             changed = true;
         }
         if (changed) { snapshotDirty = true; publish(); }
-        visibleTargets=Map.copyOf(liveIds);
+        visibleTargets=Map.copyOf(liveIds); updateCandidateCount();
         return List.copyOf(live);
     }
     public int maxBlockReadsPerTick() { return budget + MATCHES_PER_CHUNK; }
     public int maxBlockReadsPerTick(World world) { return budget + MATCHES_PER_CHUNK * world.maxMatchReads(); }
     public int loadedCount() { return loaded; }
     public int scannedCount() { return results.size(); }
-    public int pendingCount() { return queue.size() + (active == null ? 0 : 1); }
+    public int pendingCount() { return queue.size() + paused.size() + (active == null ? 0 : 1); }
     public boolean belongsTo(Object identity) { return identity != null && identity == worldIdentity; }
 
     private static final class Scan {
         final Chunk chunk;
-        final int minY, maxY, total;
+        final int maxY, total;
+        final int[] layers;
         final double originX, originY, originZ;
         final FairTargetBuffer<Point> found;
         int cursor;
@@ -316,8 +382,9 @@ public final class LoadedBlockScanner {
         Scan(Chunk chunk, int minY, int maxY, int x, int y, int z, long startedAt, TargetPolicies.Snapshot policies) {
             found=new FairTargetBuffer<>(MATCHES_PER_CHUNK,policies,false);
             this.startedAt=startedAt;
-            this.chunk = chunk; this.minY = minY; this.maxY = maxY;
-            total = 256 * (maxY - minY);
+            this.chunk = chunk; this.maxY = maxY;
+            layers = ScanLayers.ordered(minY,maxY,y+.5);
+            total = 256 * layers.length;
             originX = x + 0.5; originY = y + 0.5; originZ = z + 0.5;
         }
     }

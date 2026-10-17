@@ -80,7 +80,9 @@ public abstract class BlockEspModule extends Module {
         settings.exposedOnly(value); clear("Exposure filter changed; scan queued");
     }
     public long displayedCount(String id) { return nearestIds.values().stream().filter(id::equals).count(); }
-    public int detectedCount() { return scanner.points().size(); }
+    public int detectedCount() { return scanner.candidateCount(); }
+    public long skippedSections() { return scanner.sectionsSkipped(); }
+    public int lastSectionChecks() { return scanner.lastSectionChecks(); }
     public int scannedChunkCount() { return scanner.scannedCount(); }
     public int loadedChunkCount() { return scanner.loadedCount(); }
     public int pendingChunkCount() { return scanner.pendingCount(); }
@@ -123,11 +125,11 @@ public abstract class BlockEspModule extends Module {
         if (!supportsLevel(level)) { clear(unavailableWorldMessage()); return; }
         if (targetBlocks.isEmpty()) { clear("No available targets selected"); return; }
         LoadedBlockScanner.World world = new BlockTargetProbe(level, pos -> LoadedChunks.at(level, pos), targetNames, exposedOnly(), sharedReads, policies.snapshot()) {
-            @Override public boolean emptySection(int x, int z, int y) {
-                return loaded(x, z) && level.getChunk(x, z).getSection(level.getSectionIndex(y)).hasOnlyAir();
+            @Override public boolean canSkipSection(int x, int z, int y) {
+                return SectionTargets.excludes(level,x,z,y,this::acceptsState);
             }
         };
-        BlockPos player = client.player.blockPosition();
+        BlockPos player = ScanView.origin(client);
         scanner.tick(level, world, player.getX(), player.getY(), player.getZ(), searchRadius());
         Vec3 camera = client.gameRenderer.getMainCamera().position();
         // Compute nearest candidates once per client tick, not by sorting all matches every rendered frame.

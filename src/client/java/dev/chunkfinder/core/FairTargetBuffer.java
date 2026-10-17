@@ -73,5 +73,13 @@ public final class FairTargetBuffer<T> {
         result.sort(Comparator.comparingDouble(Entry<T>::distance).thenComparingLong(Entry::order));return List.copyOf(result);
     }
     public List<T> values(){return entries().stream().map(Entry::value).toList();}
+    public boolean removeIf(java.util.function.Predicate<T> predicate) {
+        boolean changed=false;var iterator=groups.values().iterator();
+        while(iterator.hasNext()) { Group group=iterator.next();int before=group.points.size();
+            group.points.removeIf(entry->predicate.test(entry.value()));int removed=before-group.points.size();
+            if(removed>0){count-=removed;changed=true;}if(group.points.isEmpty())iterator.remove();
+        }
+        if(changed)recompute();return changed;
+    }
     public int size(){return count;}
 }
