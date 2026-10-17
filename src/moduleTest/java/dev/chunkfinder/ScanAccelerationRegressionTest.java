@@ -53,7 +53,7 @@ final class ScanAccelerationRegressionTest {
         check(preview.nearestMatching(filled,8.5,300.5,8.5,48).isEmpty(),"partial matches are revalidated, not blindly drawn");
         preview.clear();check(preview.candidateCount()==0,"reset removes all partial preview data");
 
-        var a=new CutawayVolume(15,15,15,3),b=new CutawayVolume(-17,-17,-17,3);
+        CutawayVolume a=new CutawayVolume(15,15,15,3),b=new CutawayVolume(-17,-17,-17,3);
         check(a.contains(18,18,18)&&!a.contains(19,18,18),"cutaway is a small exact render-only volume");
         check(CutawayVolume.affected(null,a).size()<=8&&CutawayVolume.affected(a,b).size()<=16,"cutaway rebuild neighborhoods are bounded");
         check(new CutawayVolume(Integer.MAX_VALUE,0,0,3).contains(Integer.MAX_VALUE,0,0)&&!new CutawayVolume(Integer.MAX_VALUE,0,0,3).contains(Integer.MIN_VALUE,0,0),"cutaway coordinate differences cannot wrap");
