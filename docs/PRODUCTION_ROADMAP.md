@@ -125,4 +125,4 @@ servers remain outside the tested matrix. No PR was merged.
 
 ## 2.7.1
 
-Faster palette/near-height scanning and a render-only inside-block Freecam opening are described in `docs/PRODUCTION_2_7_1.md`. Acceptance is the same-commit Actions run after that change, not this paragraph. No PR is merged from this note.
+Faster palette/near-height scanning and a render-only inside-block Freecam opening are described in `docs/PRODUCTION_2_7_1.md`. Run [39011563911](https://github.com/arsnexc/Chunk-Finder-MC/actions/runs/39011563911) on commit `e0800d8f2a4f58a4298615f8c8caa9ef29f8b687` passed the required gates: 36 vanilla and 37 Sodium/Iris real-world assertions, with the fixture's first scan at 3 ticks. No PR was merged.

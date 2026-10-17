@@ -40,5 +40,20 @@ Shader packs are not part of the tested matrix.
 Headless tests cover section skipping, early neighboring previews, and cutaway
 volume bounds. The gameplay matrix checks that the camera block remains stone
 while a render-only opening is rebuilt, and that Sodium/Iris attach the pinned
-render-copy hook. Acceptance is the same-commit Actions run for this version,
-not this document. CI/Xvfb/Mesa timings are not desktop FPS promises.
+render-copy hook.
+
+**Run [39011563911](https://github.com/arsnexc/Chunk-Finder-MC/actions/runs/39011563911),
+commit `e0800d8f2a4f58a4298615f8c8caa9ef29f8b687`, passed every required gate.**
+
+- 1,021 headless UI assertions; 1,615 module assertions.
+- 92 native UI assertions; 352 native API/contract assertions.
+- 36 real-world vanilla assertions, and 37 each on Sodium 0.8.14 and Iris 1.10.8
+  with shaders disabled. The extra renderer check is the pinned Sodium hook.
+- The controlled fixture's first block scan was 3 ticks, down from 15 in 2.7.0.
+  A received block update still completed in 2 ticks. This is not a desktop or
+  worst-case server guarantee.
+- JAR SHA-256: `0b9346820c227e59119a85232a9e124b252f31ef02372db033696cf071e299b7`.
+
+CI/Xvfb/Mesa timings are not desktop FPS promises. Shader packs, unrelated mod
+combinations, anti-xray recovery, and external servers remain untested. No PR
+was merged.
